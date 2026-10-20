@@ -1,0 +1,252 @@
+/*
+  Identity tokens. The product is dark-first; light is a designed set, not an
+  inversion. Semantic colors (ok, warn, bad, pending) are separate from the
+  accent and are the only colors allowed to mean something. Wallet violet is
+  reserved for wallet actions. See docs/identity.md.
+*/
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  /* light set: same roles on a paper-white ground */
+  --background: #fafafa;
+  --foreground: #0f0f12;
+  --card: #ffffff;
+  --card-foreground: var(--foreground);
+  --popover: #ffffff;
+  --popover-foreground: var(--foreground);
+  --primary: #16a34a;
+  --primary-foreground: #f0fdf4;
+  --secondary: #f4f4f5;
+  --secondary-foreground: var(--foreground);
+  --muted: #f4f4f5;
+  --muted-foreground: #52525b;
+  --accent: #efeff1;
+  --accent-foreground: var(--foreground);
+  --destructive: #ef4444;
+  --border: #e4e4e7;
+  --grid: #ececef;
+  --input: #e4e4e7;
+  --ring: var(--primary);
+  --sidebar: #f4f4f5;
+  --sidebar-foreground: var(--foreground);
+  --sidebar-border: var(--border);
+
+  --ok: #16a34a;
+  --ok-soft: #dcfce7;
+  --warn: #ca8a04;
+  --warn-soft: #fef9c3;
+  --bad: #dc2626;
+  --bad-soft: #fee2e2;
+  --pending: #71717a;
+  --wallet: #7e22ce;
+  --wallet-soft: #f3e8ff;
+  --faint: #a1a1aa;
+
+  /* Severity ladder: five hues, critical the deepest red, high a lighter
+     red, medium amber, low blue, info grey. Separate from ok/warn/bad so a
+     finding's weight never borrows a state's meaning. */
+  --sev-critical: #b91c1c;
+  --sev-critical-soft: #fecaca;
+  --sev-high: #ef4444;
+  --sev-high-soft: #fee2e2;
+  --sev-medium: #d97706;
+  --sev-medium-soft: #fef3c7;
+  --sev-low: #0284c7;
+  --sev-low-soft: #e0f2fe;
+  --sev-info: #52525b;
+  --sev-info-soft: #f4f4f5;
+
+  --radius: 0.5rem;
+  --font-sans: "Instrument Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --font-display: "Instrument Serif", Georgia, "Times New Roman", serif;
+}
+
+.dark {
+  /* zinc darks, mint accent */
+  --background: #0f0f12;
+  --foreground: #fafafa;
+  --card: #18181b;
+  --card-foreground: var(--foreground);
+  --popover: #18181b;
+  --popover-foreground: var(--foreground);
+  --primary: #86efac;
+  --primary-foreground: #052e16;
+  --secondary: #27272a;
+  --secondary-foreground: var(--foreground);
+  --muted: #212225;
+  --muted-foreground: #a1a1aa;
+  --accent: #27272a;
+  --accent-foreground: var(--foreground);
+  --destructive: #f87171;
+  --border: #27272a;
+  --grid: #17171b;
+  --input: #35353b;
+  --ring: var(--primary);
+  --sidebar: #0f0f12;
+  --sidebar-foreground: var(--foreground);
+  --sidebar-border: #18181b;
+
+  --ok: #82e28d;
+  --ok-soft: #0e2e12;
+  --warn: #facc15;
+  --warn-soft: #422006;
+  --bad: #f87171;
+  --bad-soft: #450a0a;
+  --pending: #71717a;
+  --wallet: #c084fc;
+  --wallet-soft: #3b0764;
+  --faint: #52525b;
+
+  --sev-critical: #ef4444;
+  --sev-critical-soft: #450a0a;
+  --sev-high: #fca5a5;
+  --sev-high-soft: #3f1515;
+  --sev-medium: #fbbf24;
+  --sev-medium-soft: #422006;
+  --sev-low: #7dd3fc;
+  --sev-low-soft: #082f49;
+  --sev-info: #a1a1aa;
+  --sev-info-soft: #27272a;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-grid: var(--grid);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+
+  --color-ok: var(--ok);
+  --color-ok-soft: var(--ok-soft);
+  --color-warn: var(--warn);
+  --color-warn-soft: var(--warn-soft);
+  --color-bad: var(--bad);
+  --color-bad-soft: var(--bad-soft);
+  --color-pending: var(--pending);
+  --color-wallet: var(--wallet);
+  --color-wallet-soft: var(--wallet-soft);
+  --color-faint: var(--faint);
+  --color-sev-critical: var(--sev-critical);
+  --color-sev-critical-soft: var(--sev-critical-soft);
+  --color-sev-high: var(--sev-high);
+  --color-sev-high-soft: var(--sev-high-soft);
+  --color-sev-medium: var(--sev-medium);
+  --color-sev-medium-soft: var(--sev-medium-soft);
+  --color-sev-low: var(--sev-low);
+  --color-sev-low-soft: var(--sev-low-soft);
+  --color-sev-info: var(--sev-info);
+  --color-sev-info-soft: var(--sev-info-soft);
+
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+  --font-display: var(--font-display);
+
+  --radius-sm: calc(var(--radius) - 2px);
+  --radius-md: var(--radius);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  /* Tailwind 4 leaves buttons on the browser's default arrow. Anything that
+     can be pressed says so under the pointer, and anything that cannot says
+     that too - set here rather than per component so the two never drift. */
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  [role="tab"]:not([aria-disabled="true"]),
+  [role="switch"]:not([aria-disabled="true"]),
+  summary {
+    cursor: pointer;
+  }
+  button:disabled,
+  [aria-disabled="true"] {
+    cursor: not-allowed;
+  }
+  html {
+    color-scheme: light;
+  }
+  html.dark {
+    color-scheme: dark;
+  }
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-size: 14.5px;
+    line-height: 1.5;
+    font-feature-settings: "ss01", "cv11";
+  }
+  h1, h2, h3 {
+    text-wrap: balance;
+    letter-spacing: -0.015em;
+  }
+  code, kbd, pre, .mono {
+    @apply font-mono;
+    font-variant-numeric: tabular-nums;
+  }
+  ::selection {
+    background: color-mix(in srgb, var(--primary) 35%, transparent);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+  html.reduce-motion *, html.reduce-motion *::before, html.reduce-motion *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* High contrast: the quiet greys step up, borders and rings become plain. */
+html.contrast {
+  --muted-foreground: #27272a;
+  --faint: #52525b;
+  --border: #a1a1aa;
+  --input: #a1a1aa;
+  --pending: #3f3f46;
+}
+html.contrast.dark {
+  --muted-foreground: #e4e4e7;
+  --faint: #a1a1aa;
+  --border: #52525b;
+  --input: #71717a;
+  --pending: #a1a1aa;
+}
+
+@utility label-caps {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+}
+
+@utility num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}

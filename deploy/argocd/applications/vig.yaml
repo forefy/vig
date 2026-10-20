@@ -1,0 +1,61 @@
+# Child Application for forefy's prod vig, managed by the app-of-apps root that already lives in
+# the ArgoCD root repository (an app-of-apps layout). vig pulls its VERSIONED
+# chart from the private OCI registry: CI publishes ghcr.io/forefy/charts/vig on each v* tag,
+# pinned to the image digest. Deploying = bump targetRevision + push to main; the root syncs it.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: vig
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: ghcr.io/forefy/charts
+    chart: vig
+    # PIN. Bump and push to main to deploy (CI must have published this version first).
+    targetRevision: 0.1.0
+    helm:
+      valuesObject:
+        imagePullSecrets:
+          - name: ghcr-pull
+        app:
+          treasuryPubkey: ""
+          githubAppSlug: ""
+          discordGuildId: ""
+        ingress:
+          mode: hostport
+          className: traefik
+          host: vig.forefy.com
+          tls:
+            enabled: true
+            certManagerClusterIssuer: letsencrypt-prod
+        postgres:
+          internal: true
+          auth:
+            # Stable under GitOps; the password itself lives in the existing Secret.
+            password: ""
+        data:
+          persistence:
+            enabled: true
+            size: 5Gi
+        secrets:
+          # Seeded out of band (kubectl create secret / ESO); keys listed in deploy/chart/values.yaml.
+          mode: existing
+          existingSecret: vig-secrets
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: vig
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
+  ignoreDifferences:
+    - group: apps
+      kind: StatefulSet
+      jsonPointers:
+        - /spec/volumeClaimTemplates

@@ -1,0 +1,31 @@
+# Post-deploy verification: prod serves the version you shipped. Run after
+# bumping targetRevision in the ArgoCD application. Polls GET /version and
+# fails if the rollout never lands, so a stuck sync is a red check.
+name: verify-deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version prod should be serving (e.g. 0.1.7)
+        required: true
+      host:
+        description: Base URL to probe
+        required: false
+        default: https://vig.forefy.com
+      timeout:
+        description: Max seconds to wait for the rollout
+        required: false
+        default: "1200"
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Poll /version until it matches (or fail)
+        env:
+          HOST: ${{ inputs.host }}
+          VERSION: ${{ inputs.version }}
+          TIMEOUT: ${{ inputs.timeout }}
+        run: bash scripts/verify-release.sh

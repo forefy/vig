@@ -1,0 +1,85 @@
+# Release: on a version tag, build the multi-arch image and package the Helm
+# chart, both pushed to GHCR under ghcr.io/forefy. The chart is pinned to the
+# image digest built in the same run, so ArgoCD pulls an immutable pair.
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  IMAGE: ghcr.io/forefy/vig
+  CHART_REPO: oci://ghcr.io/forefy/charts
+
+jobs:
+  image:
+    if: github.repository == 'forefy/vig'
+    runs-on: ubuntu-latest
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+      version: ${{ steps.meta.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Derive version from tag
+        id: meta
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push multi-arch image
+        id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ${{ env.IMAGE }}:${{ steps.meta.outputs.version }}
+            ${{ env.IMAGE }}:latest
+          build-args: |
+            VERSION=${{ steps.meta.outputs.version }}
+            COMMIT=${{ github.sha }}
+            VITE_SITE_URL=${{ vars.SITE_URL }}
+            SITE_URL=${{ vars.SITE_URL }}
+          provenance: true
+          sbom: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  chart:
+    needs: image
+    if: github.repository == 'forefy/vig'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.16.0
+      - name: Log in to GHCR (Helm OCI)
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u ${{ github.actor }} --password-stdin
+      - name: Pin the chart to the image built in this run
+        env:
+          DIGEST: ${{ needs.image.outputs.digest }}
+        run: |
+          set -euo pipefail
+          yq -i '.image.digest = strenv(DIGEST) | .image.tag = ""' deploy/chart/values.yaml
+          echo "Pinned image.digest=${DIGEST}"
+      - name: Lint, package and push the chart
+        env:
+          VERSION: ${{ needs.image.outputs.version }}
+        run: |
+          set -euo pipefail
+          helm lint deploy/chart
+          helm package deploy/chart --version "${VERSION}" --app-version "${VERSION}"
+          helm push "vig-${VERSION}.tgz" "${CHART_REPO}"
+          echo "Pushed ${CHART_REPO}/vig:${VERSION}"

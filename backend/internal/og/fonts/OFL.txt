@@ -1,0 +1,18 @@
+The fonts in this directory are embedded into the vig binary to draw
+OpenGraph preview images. Each is licensed under the SIL Open Font License,
+Version 1.1 (https://openfontlicense.org), which permits bundling with
+software as long as the fonts are not sold on their own.
+
+  GeistMono-Regular.ttf, GeistMono-Medium.ttf
+    Copyright 2023 Vercel, in collaboration with basement.studio.
+    https://github.com/vercel/geist-font
+
+  InstrumentSans.ttf
+    Copyright 2022 The Instrument Sans Project Authors.
+    https://github.com/Instrument/instrument-sans
+
+  InstrumentSerif-Italic.ttf
+    Copyright 2022 The Instrument Serif Project Authors.
+    https://github.com/Instrument/instrument-serif
+
+The Reserved Font Names, if any, are unchanged; the files are unmodified.

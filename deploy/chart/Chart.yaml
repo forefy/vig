@@ -1,0 +1,14 @@
+apiVersion: v2
+name: vig
+description: vig API, operator surface and prerendered frontend in one image. The same chart runs local (k3d + Tilt) and prod (ArgoCD).
+type: application
+# version    = chart version (CI sets it to the release tag)
+# appVersion = the image this chart defaults to (CI pins image.digest to match)
+version: 0.1.0
+appVersion: "0.1.0"
+kubeVersion: ">=1.27.0-0"
+home: https://github.com/forefy/vig
+sources:
+  - https://github.com/forefy/vig
+maintainers:
+  - name: forefy

@@ -1,0 +1,19 @@
+# Keep the build context to sources. Build output is produced inside the image.
+.git
+.github
+.claude
+todo
+secrets
+deploy
+docs
+node_modules
+frontend/node_modules
+frontend/dist
+backend/bin
+backend/data
+*.tfstate*
+*.tfplan
+.terraform
+.tiltbuild
+kubeconfig*
+Tiltfile

@@ -1,0 +1,55 @@
+{{- if .Values.migrations.enabled -}}
+{{/*
+Schema migrations run as a hook Job before the new pods roll (and after the first install, once
+the internal Postgres exists). goose is idempotent, so a re-run is a no-op.
+*/}}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "vig.fullname" . }}-migrate
+  labels:
+    {{- include "vig.labels" . | nindent 4 }}
+    app.kubernetes.io/component: migrate
+  annotations:
+    "helm.sh/hook": {{ .Values.migrations.hook | quote }}
+    "helm.sh/hook-weight": "10"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: {{ .Values.migrations.backoffLimit }}
+  activeDeadlineSeconds: {{ .Values.migrations.activeDeadlineSeconds }}
+  template:
+    metadata:
+      labels:
+        {{- include "vig.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: migrate
+    spec:
+      restartPolicy: OnFailure
+      automountServiceAccountToken: false
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.imagePullSecret.create }}
+        {{- if not .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- end }}
+        - name: {{ include "vig.fullname" . }}-regcred
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: migrate
+          image: {{ include "vig.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          args: ["migrate", "up"]
+          env:
+            {{- include "vig.env" . | nindent 12 }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 256Mi
+{{- end }}

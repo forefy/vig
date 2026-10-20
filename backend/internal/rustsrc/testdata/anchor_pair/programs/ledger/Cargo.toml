@@ -1,0 +1,7 @@
+[package]
+name = "book-ledger"
+version = "0.1.0"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "book_ledger"

@@ -1,0 +1,42 @@
+# Local dev-parity overrides (k3d + Tilt). Same chart as prod; only values differ. Tilt builds
+# the image into the k3d registry; everything else stays as prod so the local run is a real
+# pre-prod check.
+
+image:
+  repository: vig
+  tag: dev
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+imagePullSecret:
+  create: false
+
+app:
+  siteUrl: http://vig.localhost:7113
+  logFormat: text
+
+secrets:
+  mode: create
+  sessionSecret: dev-session-secret-not-for-prod-0000   # local only
+
+postgres:
+  internal: true
+  auth:
+    password: dev-postgres-pw   # stable: Tilt renders with helm template (no lookup)
+  persistence:
+    enabled: true
+    size: 1Gi
+
+ingress:
+  mode: hostport
+  className: traefik
+  host: vig.localhost
+  tls:
+    enabled: false
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    memory: 256Mi

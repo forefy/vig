@@ -1,0 +1,44 @@
+# vig
+
+# planning scratch, screenshots, anything not part of the product
+todo/
+
+# secrets are committed encrypted only; the examples are tracked (order matters: negations after the glob)
+secrets/*
+!secrets/*.secret
+!secrets/*.example
+
+# git-secret: only the public keyring and the path map are tracked
+.gitsecret/keys/random_seed
+.gitsecret/keys/*~
+.gitsecret/keys/S.*
+.gitsecret/keys/*.lock
+
+# local env
+.env
+.env.*
+!.env.example
+
+# build output and deps
+node_modules/
+frontend/dist/
+backend/bin/
+
+# runtime data (tarball cache, clones, advisory db, embedded postgres)
+backend/data/
+backend/internal/sbpf/testdata/anchor_large.so
+
+# infra state: never committed
+*.tfstate*
+*.tfplan
+.terraform/
+.tiltbuild/
+kubeconfig*
+
+# os
+.DS_Store
+
+# Local tooling and build outputs
+.claude/
+backend/vig-op
+frontend/test-results/

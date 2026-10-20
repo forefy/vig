@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "vig.fullname" . }}-test-readyz
+  labels:
+    {{- include "vig.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  automountServiceAccountToken: false
+  containers:
+    - name: readyz
+      image: {{ .Values.postgres.image }}   # alpine-based, ships wget
+      command: ["wget"]
+      args: ["--spider", "-q", "http://{{ include "vig.fullname" . }}:{{ .Values.service.port }}/readyz"]

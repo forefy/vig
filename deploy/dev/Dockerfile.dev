@@ -1,0 +1,11 @@
+# Dev-only image for the Tilt hot-reload loop. Unlike the prod distroless image this has a
+# shell (Tilt's restart_process wrapper needs one) and runs writable so live_update can sync
+# the rebuilt binary and dist in place. The binary and dist are built on the HOST by the
+# Tiltfile and copied in; this image carries no toolchain. Never ship this.
+FROM alpine:3
+RUN apk add --no-cache ca-certificates tzdata && mkdir -p /data /srv/web
+WORKDIR /app
+COPY backend/bin/vig /app/vig
+COPY frontend/dist /srv/web
+ENV STATIC_DIR=/srv/web DATA_DIR=/data PORT=7112
+ENTRYPOINT ["/app/vig"]

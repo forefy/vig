@@ -1,0 +1,187 @@
+# vig production defaults. Local dev overrides with values.dev.yaml (k3d + Tilt); prod overrides
+# with the ArgoCD application's values. Differences live in values only, never in manifests.
+
+replicaCount: 1
+
+image:
+  repository: ghcr.io/forefy/vig
+  # Prefer an immutable digest (CI pins this on release). If digest is set it wins over tag.
+  digest: ""            # e.g. sha256:abc123...
+  tag: ""               # e.g. 0.1.0; fallback when digest is empty (local/dev)
+  pullPolicy: IfNotPresent
+
+# ghcr.io/forefy is private. Reference pre-created pull secrets, or have the chart create one
+# from a read-only GHCR token.
+imagePullSecrets: []     # e.g. [{ name: ghcr-pull }]
+imagePullSecret:
+  create: false
+  registry: ghcr.io
+  username: ""
+  password: ""           # read-only PAT with read:packages
+
+# ---- application (non-secret) ----
+app:
+  # Public origin. FRONTEND_URL, SITE_URL and BACKEND_URL are derived from ingress.host and
+  # ingress.tls.enabled; set siteUrl to override (e.g. when a CDN fronts a different host).
+  siteUrl: ""
+  logFormat: json
+  workers: true           # VIG_WORKERS: run the scan runner and housekeeping in this pod
+  treasuryPubkey: ""      # TREASURY_PUBKEY: USDC destination for credit purchases
+  usdcMint: EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v
+  rpcFallbackUrl: https://api.mainnet-beta.solana.com
+  osecVerifyUrl: https://verify.osec.io
+  githubApiUrl: https://api.github.com
+  githubAppSlug: ""       # GITHUB_APP_SLUG: the App's URL slug for the install link
+  discordGuildId: ""
+  discordInviteUrl: ""    # DISCORD_INVITE_URL: support server invite shown to users
+  smtp:
+    host: ""
+    port: "587"
+    user: ""
+    from: ""
+  # Extra environment, appended verbatim.
+  extraEnv: []
+
+# ---- secrets ----
+# mode=create  : the chart renders a Secret from the inline values below.
+# mode=existing: an externally managed Secret (ESO, sealed-secrets, kubectl). The chart creates
+#                nothing and reads these keys, all optional except the first two:
+#   session-secret, database-url, google-client-id, google-client-secret,
+#   github-oauth-client-id, github-oauth-client-secret, github-app-id, github-app-private-key,
+#   github-app-webhook-secret, discord-client-id, discord-client-secret, discord-bot-token,
+#   github-token, rpc-primary-url, smtp-pass
+#   (postgres-password when postgres.internal=true)
+secrets:
+  mode: create
+  existingSecret: ""
+  # Used only when mode=create:
+  sessionSecret: ""          # SESSION_SECRET, 32+ random bytes; REQUIRED
+  databaseUrl: ""            # DATABASE_URL; REQUIRED when postgres.internal=false, ignored otherwise
+  googleClientId: ""
+  googleClientSecret: ""
+  githubOauthClientId: ""
+  githubOauthClientSecret: ""
+  githubAppId: ""
+  githubAppPrivateKey: ""    # PEM, multi-line
+  githubAppWebhookSecret: ""
+  discordClientId: ""
+  discordClientSecret: ""
+  discordBotToken: ""
+  githubToken: ""            # read-only PAT for public repo tarballs (rate limit only)
+  rpcPrimaryUrl: ""          # keyed RPC endpoint; the public fallback is app.rpcFallbackUrl
+  smtpPass: ""
+
+# ---- database ----
+postgres:
+  internal: true
+  image: postgres:17-alpine
+  auth:
+    username: vig
+    database: vig
+    # Set a STABLE password under GitOps: ArgoCD renders without cluster access, so the helm
+    # `lookup` that reuses a generated password cannot run and an empty value would churn the
+    # password every sync. Empty is fine for plain `helm install`.
+    password: ""
+  persistence:
+    enabled: true
+    size: 10Gi
+    storageClass: ""
+  resources: {}
+
+# ---- migrations ----
+# A Job runs `vig migrate up`. Helm hooks map to ArgoCD PreSync/PostSync; a pre-install hook
+# cannot work with the internal Postgres (it does not exist yet during pre-install), hence the
+# default. With an external database set hook to "pre-install,pre-upgrade".
+migrations:
+  enabled: true
+  hook: post-install,pre-upgrade
+  backoffLimit: 10
+  activeDeadlineSeconds: 600
+
+# ---- data volume ----
+# DATA_DIR holds repo tarballs, clone scratch and the advisory database. Ephemeral is fine; a PVC
+# keeps the caches warm across restarts.
+data:
+  persistence:
+    enabled: false
+    size: 5Gi
+    storageClass: ""
+
+# ---- networking ----
+service:
+  type: ClusterIP
+  port: 7112
+
+# ingress.mode: hostport (Ingress on the cluster's controller), loadbalancer (Service type
+# LoadBalancer), existing (you own routing).
+ingress:
+  mode: hostport
+  className: traefik
+  host: vig.example.com
+  annotations: {}
+  tls:
+    enabled: true
+    certManagerClusterIssuer: letsencrypt-prod
+    secretName: ""        # defaults to <release>-tls
+  # Admin and operator API prefixes gated to source IPs at the edge (Traefik ipAllowList), on top
+  # of the app's own auth. Empty = auth only. hostport mode only.
+  adminAllowlist: []      # e.g. ["203.0.113.10/32"]
+  # Proxy ranges to skip when reading X-Forwarded-For (Cloudflare by default).
+  adminAllowlistExcludedIPs:
+    - 173.245.48.0/20
+    - 103.21.244.0/22
+    - 103.22.200.0/22
+    - 103.31.4.0/22
+    - 141.101.64.0/18
+    - 108.162.192.0/18
+    - 190.93.240.0/20
+    - 188.114.96.0/20
+    - 197.234.240.0/22
+    - 198.41.128.0/17
+    - 162.158.0.0/15
+    - 104.16.0.0/13
+    - 104.24.0.0/14
+    - 172.64.0.0/13
+    - 131.0.72.0/22
+    - 2400:cb00::/32
+    - 2606:4700::/32
+    - 2803:f800::/32
+    - 2405:b500::/32
+    - 2405:8100::/32
+    - 2a06:98c0::/29
+    - 2c0f:f248::/32
+  adminPaths:
+    - /v1/admin
+
+# ---- optional plane, OFF by default ----
+optional:
+  serviceMonitor: false   # Prometheus Operator ServiceMonitor scraping /metrics
+  podDisruptionBudget: false
+  networkPolicy: false
+  networkPolicyIngressNamespace: kube-system
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    memory: 512Mi
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  readOnlyRootFilesystem: true
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop: [ALL]
+
+podAnnotations: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}

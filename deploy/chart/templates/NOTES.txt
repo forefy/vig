@@ -1,0 +1,26 @@
+vig {{ .Chart.AppVersion }} installed as "{{ .Release.Name }}".
+
+Reach it:
+{{- if eq .Values.ingress.mode "hostport" }}
+  {{ include "vig.siteUrl" . }}/   (Ingress via {{ .Values.ingress.className }}{{ if .Values.ingress.tls.enabled }}, TLS{{ if .Values.ingress.tls.certManagerClusterIssuer }} via cert-manager/{{ .Values.ingress.tls.certManagerClusterIssuer }}{{ end }}{{ end }})
+{{- else if eq .Values.ingress.mode "loadbalancer" }}
+  kubectl -n {{ .Release.Namespace }} get svc {{ include "vig.fullname" . }} -w   # wait for the EXTERNAL-IP
+{{- else }}
+  Routing is yours to wire (ingress.mode=existing). Service: {{ include "vig.fullname" . }}:{{ .Values.service.port }}
+{{- end }}
+
+Port-forward for a quick check:
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "vig.fullname" . }} 7112:{{ .Values.service.port }}
+  curl -f http://localhost:7112/readyz && curl -s http://localhost:7112/version
+
+Database: {{ if .Values.postgres.internal }}internal Postgres StatefulSet ({{ include "vig.postgresFullname" . }}){{ else }}external (secrets.databaseUrl){{ end }}
+Migrations: {{ if .Values.migrations.enabled }}Job {{ include "vig.fullname" . }}-migrate on {{ .Values.migrations.hook }}{{ else }}disabled; run `vig migrate up` yourself{{ end }}
+{{- if and (eq .Values.secrets.mode "create") .Values.postgres.internal (not .Values.postgres.auth.password) }}
+
+  NOTE: postgres.auth.password is empty, so the DB password is auto-generated. Fine for
+  `helm install`; under ArgoCD set a stable postgres.auth.password or secrets.mode=existing.
+{{- end }}
+{{- if not .Values.app.treasuryPubkey }}
+
+  NOTE: app.treasuryPubkey is empty. Credit purchases answer 503 until it is set.
+{{- end }}
