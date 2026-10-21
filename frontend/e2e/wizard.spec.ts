@@ -29,3 +29,28 @@ test('evm contract step fetches a verified contract', async ({ page }) => {
   await expect(page.getByText('verified', { exact: true }).first()).toBeVisible({ timeout: 60_000 })
   await expect(page.getByText('no proxy', { exact: true }).first()).toBeVisible()
 })
+
+// The web path: the site card, an origin read once for its panel, a
+// subdomain and a prefix added to the scope, and the review pinned to the
+// scope's URL prefixes. No repository: the site is live only.
+test('web app steps reach the review with the authorised scope', async ({ page }) => {
+  await page.goto('/v1/auth/dev/login?user=pro')
+  await page.goto('/app/audits/new')
+  await expect(page.getByRole('heading', { name: 'Start an audit' })).toBeVisible()
+  await page.getByText('Web app', { exact: true }).click()
+  await expect(page.getByText('live site', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Continue' }).click()
+  await page.getByRole('textbox', { name: 'Origin' }).fill('https://example.com')
+  await expect(page.getByText('Ownership', { exact: true })).toBeVisible({ timeout: 30_000 })
+  await expect(page.getByText('not proven', { exact: true }).first()).toBeVisible()
+  await page.getByRole('button', { name: 'Continue' }).click()
+  await page.getByRole('textbox', { name: 'hosts' }).fill('api.example.com')
+  await page.getByRole('button', { name: 'Add' }).first().click()
+  await expect(page.getByText('subdomain', { exact: true })).toBeVisible()
+  await page.getByRole('textbox', { name: 'path prefixes' }).fill('/v1/')
+  await page.getByRole('button', { name: 'Add' }).last().click()
+  await page.getByRole('button', { name: 'Review', exact: true }).click()
+  await expect(page.getByText('https://api.example.com/v1/', { exact: true })).toBeVisible({ timeout: 15_000 })
+  await expect(page.getByText('https://example.com/v1/', { exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Queue audit' })).toBeVisible()
+})

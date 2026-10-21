@@ -69,7 +69,20 @@ func (d *Deps) toTarget(ctx context.Context, t store.Target) (Target, error) {
 	}
 	out := Target{ID: t.ID, Adapter: t.Adapter, BaseURL: t.BaseURL, SourceKind: t.SourceKind, Repo: t.Repo, Path: t.Subpath, InstallationID: t.InstallationID,
 		Revision: Revision{Selector: t.Selector, Value: t.Revision, Commit: t.CommitSHA, Author: t.CommitAuthor, Date: t.CommitDate}, Programs: []Program{}, CreatedAt: t.CreatedAt}
-	out.Declared, out.Scanned = d.declaredIDs(ctx, t)
+	if d.isSite(t) {
+		site := &TargetSite{Origin: t.BaseURL, Scope: t.Scope.Normalize(originHost(t.BaseURL)), OwnershipProven: t.OwnershipProvenAt != nil, OwnershipMethod: t.OwnershipMethod, OwnershipProvenAt: t.OwnershipProvenAt}
+		if t.Panel != nil {
+			site.Panel = *t.Panel
+		} else {
+			site.Panel = core.VerificationPanel{Subject: t.BaseURL, Rows: []core.PanelRow{}}
+		}
+		out.Site = site
+		// A site has no checkout to read declared ids from.
+		out.Scanned = true
+		out.Declared = []DeclaredID{}
+	} else {
+		out.Declared, out.Scanned = d.declaredIDs(ctx, t)
+	}
 	for _, p := range programs {
 		out.Programs = append(out.Programs, toProgram(p))
 	}

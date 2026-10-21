@@ -21,17 +21,21 @@ export function Pin({ pin, adapter }: { pin: PinT; adapter?: string }) {
   return (
     <FactGroup label="scope">
         {pin.repo && (
-          <FactRow kind="repo">
+          <FactRow kind={words.web ? 'site' : 'repo'}>
             <Copy value={pin.repo} className="break-all text-foreground">{pin.repo}</Copy>
             {/* Named, like the program's slot below it: a bare forty
                 characters of hex says nothing about what it pins. */}
-            <span className="flex flex-wrap items-center gap-x-1.5 font-mono text-xs text-faint">
-              commit
-              <Copy value={pin.commit} className="break-all">
-                {pin.base_sha ? `${pin.base_sha}..` : ''}
-                {pin.commit}
-              </Copy>
-            </span>
+            {/* A live site without a snapshot has no commit to pin; the
+                origin alone is the row. */}
+            {pin.commit && (
+              <span className="flex flex-wrap items-center gap-x-1.5 font-mono text-xs text-faint">
+                commit
+                <Copy value={pin.commit} className="break-all">
+                  {pin.base_sha ? `${pin.base_sha}..` : ''}
+                  {pin.commit}
+                </Copy>
+              </span>
+            )}
           </FactRow>
         )}
         {programs.map((p) => (

@@ -3,7 +3,7 @@ import { chainWords } from '@/lib/chain'
 import { Link, useNavigate, useSearchParams } from 'react-router'
 import { Helmet } from 'react-helmet-async'
 import { useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, ArrowRight, Plus } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Plus, X } from 'lucide-react'
 import { api } from '@/api/client'
 import { $api } from '@/api/hooks'
 import { useMe } from '@/features/auth/useMe'
@@ -15,6 +15,7 @@ import { ProblemBadge } from '@/components/ui/states'
 import { Tree, collectFiles, autoSelection } from './Tree'
 import { ProgramCard } from '@/adapters/solana/ProgramCard'
 import { ContractCard } from '@/adapters/ethereum/ContractCard'
+import { SiteCard } from '@/adapters/webapp/SiteCard'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -31,22 +32,52 @@ type TreeT = components['schemas']['Tree']
 type Installation = components['schemas']['Installation']
 type PinT = components['schemas']['Pin']
 type ProgramSource = components['schemas']['ProgramSource']
+type AdapterInfo = components['schemas']['AdapterInfo']
 
 const repoRe = /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+(\/tree\/[^\s]+)?\/?$/
 const pidRe = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/
 const evmRe = /^0x[0-9a-fA-F]{40}$/
 
-// The target kind picks the adapter, and the adapter says what an address
+// The target card names the adapter, and the adapter says what an address
 // looks like.
-const adapterOf = (kind: string): 'solana' | 'ethereum' => (kind === 'evm_contract' ? 'ethereum' : 'solana')
 const isId = (adapter: string, id: string): boolean => (adapter === 'ethereum' ? evmRe : pidRe).test(id)
+
+type TargetCard = { value: string; label: string; hint?: string; soon?: boolean; disabled?: boolean; adapter: string }
+
+// The target cards are every adapter's target options, live ones first and
+// each value once, so a new adapter is a new card and nothing here changes.
+function cardsOf(adapters: AdapterInfo[]): TargetCard[] {
+  const seen = new Map<string, TargetCard>()
+  for (const a of adapters) {
+    const opts = (a.steps ?? []).find((s) => s.key === 'target')?.fields?.find((f) => f.key === 'kind')?.options ?? []
+    for (const o of opts) {
+      const prev = seen.get(o.value)
+      if (prev && !prev.soon) continue
+      seen.set(o.value, { value: o.value, label: o.label, hint: o.hint ?? undefined, soon: o.soon ?? undefined, disabled: o.disabled ?? undefined, adapter: a.key })
+    }
+  }
+  const all = [...seen.values()]
+  return [...all.filter((c) => !c.soon), ...all.filter((c) => c.soon)]
+}
+
+// The adapter's pattern for a field, or the engine's own when it gives none.
+const reOf = (pattern: string | undefined, fallback: RegExp): RegExp => (pattern ? new RegExp(pattern) : fallback)
+
+const hostOf = (origin: string): string => {
+  try {
+    return new URL(origin.trim()).hostname.toLowerCase()
+  } catch {
+    return ''
+  }
+}
+const underHost = (originHost: string, host: string): boolean => !!originHost && (host === originHost || host.endsWith('.' + originHost))
 
 // Where a program's repo was found, when nothing verified it.
 const originWord: Record<string, string> = { security_txt: 'security.txt', idl: 'idl metadata', search: 'code search' }
 
 // What a target was resolved from. A program id resolves as a public repo.
-function sourceKeyOf(kind: string, repoUrl: string, installationId: string, installRepo: string, selector: string, revision: string) {
-  return [kind === 'program' ? 'public' : kind, repoUrl.trim(), installationId, installRepo.trim(), selector, revision.trim()].join('|')
+function sourceKeyOf(kind: string, repoUrl: string, installationId: string, installRepo: string, selector: string, revision: string, baseUrl = '') {
+  return [kind === 'program' ? 'public' : kind, repoUrl.trim(), installationId, installRepo.trim(), selector, revision.trim(), baseUrl.trim()].join('|')
 }
 const problem = (e: unknown) => (e as { detail?: string } | undefined)?.detail
 
@@ -89,9 +120,25 @@ export function NewAudit() {
 
   // target
   const [kind, setKind] = useState<string>(d.kind ?? 'solana_program')
-  const adapterKey = adapterOf(kind)
-  const adapter = $api.useQuery('get', '/v1/adapters/{key}', { params: { path: { key: adapterKey } } }, { staleTime: Infinity })
+  const adapters = $api.useQuery('get', '/v1/adapters', {}, { staleTime: Infinity })
+  const cards = useMemo(() => cardsOf(adapters.data?.items ?? []), [adapters.data])
+  const card = cards.find((c) => c.value === kind)
+  const adapterKey = card?.adapter ?? ''
+  const adapter = $api.useQuery('get', '/v1/adapters/{key}', { params: { path: { key: adapterKey } } }, { staleTime: Infinity, enabled: !!adapterKey })
   const steps = useMemo(() => (adapter.data?.steps ?? []).map((s) => ({ key: s.key, title: s.title })), [adapter.data])
+  const targetStep = useMemo(() => adapter.data?.steps?.find((s) => s.key === 'target'), [adapter.data])
+  const hasCoverage = !!targetStep?.fields?.some((f) => f.key === 'coverage')
+  // A site step marks a live target: an origin where a repository was, a
+  // scope of hosts and prefixes where a file tree was.
+  const siteStep = useMemo(() => adapter.data?.steps?.find((s) => s.key === 'site'), [adapter.data])
+  const isSite = !!siteStep
+  const originField = siteStep?.fields?.find((f) => f.key === 'base_url')
+  const originRe = reOf(originField?.pattern, /^https?:\/\/[^\s/]+\/?$/)
+  const scopeStep = useMemo(() => adapter.data?.steps?.find((s) => s.key === 'scope'), [adapter.data])
+  const hostField = scopeStep?.fields?.find((f) => f.key === 'hosts')
+  const pathField = scopeStep?.fields?.find((f) => f.key === 'paths')
+  const hostRe = reOf(hostField?.pattern, /^[a-z0-9.-]+$/)
+  const pathRe = reOf(pathField?.pattern, /^\//)
   const programsStep = useMemo(() => adapter.data?.steps?.find((s) => s.key === 'programs'), [adapter.data])
   const chainField = programsStep?.fields?.find((f) => f.key === 'chain')
   const idField = programsStep?.fields?.find((f) => f.key === 'program_ids')
@@ -118,11 +165,16 @@ export function NewAudit() {
   const [base, setBase] = useState(d.base ?? p.base)
   const [installationId, setInstallationId] = useState(d.installation_id ?? '')
   const [installRepo, setInstallRepo] = useState(d.install_repo ?? '')
+  // site
+  const [baseUrl, setBaseUrl] = useState(d.base_url ?? '')
+  const [hosts, setHosts] = useState<string[]>(d.hosts ?? [])
+  const [paths, setPaths] = useState<string[]>(d.paths ?? [])
+  const [savingScope, setSavingScope] = useState(false)
   const [target, setTarget] = useState<Target | null>(d.target ?? null)
   const [resolving, setResolving] = useState(false)
   // The inputs the current target was resolved from; anything else is stale.
   const [resolvedKey, setResolvedKey] = useState(() =>
-    d.target ? sourceKeyOf(d.source_kind ?? 'public', d.repo_url ?? '', d.installation_id ?? '', d.install_repo ?? '', d.selector ?? 'branch', d.revision ?? '') : '',
+    d.target ? sourceKeyOf(d.source_kind ?? 'public', d.repo_url ?? '', d.installation_id ?? '', d.install_repo ?? '', d.selector ?? 'branch', d.revision ?? '', d.base_url ?? '') : '',
   )
   // programs
   const [pid, setPid] = useState('')
@@ -159,11 +211,14 @@ export function NewAudit() {
       selector,
       revision,
       base,
+      base_url: baseUrl,
+      hosts,
+      paths,
       target,
       programs,
       selected: [...selected],
     })
-  }, [userId, step, kind, coverage, sourceKind, sourcePid, chain, repoUrl, installationId, installRepo, selector, revision, base, target, programs, selected])
+  }, [userId, step, kind, coverage, sourceKind, sourcePid, chain, repoUrl, installationId, installRepo, selector, revision, base, baseUrl, hosts, paths, target, programs, selected])
 
   const selectedLines = useMemo(() => {
     if (!tree) return 0
@@ -200,30 +255,55 @@ export function NewAudit() {
     }
   }, [])
 
-  const sourceValid = sourceKind === 'installation' ? !!installationId && !!installRepo.trim() : repoRe.test(repoUrl.trim())
-  const sourceKey = sourceKeyOf(sourceKind, repoUrl, installationId, installRepo, selector, revision)
+  const originHost = hostOf(target?.site?.origin ?? baseUrl)
+  const siteValid = isSite && originRe.test(baseUrl.trim()) && (repoUrl.trim() === '' || repoRe.test(repoUrl.trim()))
+  const sourceValid = isSite ? siteValid : sourceKind === 'installation' ? !!installationId && !!installRepo.trim() : repoRe.test(repoUrl.trim())
+  const sourceKey = isSite ? sourceKeyOf('site', repoUrl, '', '', selector, revision, baseUrl) : sourceKeyOf(sourceKind, repoUrl, installationId, installRepo, selector, revision)
   const resolved = !!target && resolvedKey === sourceKey
 
   const resolveSource = useCallback(async () => {
     setResolving(true)
     const fromProgram = sourceKind === 'program'
+    const snapshot = repoUrl.trim() !== ''
     const res = await api.POST('/v1/targets', {
-      body: {
-        adapter: adapterKey,
-        source_kind: fromProgram ? 'public' : sourceKind,
-        repo_url: sourceKind === 'installation' ? undefined : repoUrl.trim(),
-        installation_id: sourceKind === 'installation' ? installationId : undefined,
-        repo: sourceKind === 'installation' ? installRepo.trim() : undefined,
-        selector,
-        revision: revision.trim(),
-      },
+      body: isSite
+        ? {
+            adapter: adapterKey,
+            base_url: baseUrl.trim(),
+            repo_url: snapshot ? repoUrl.trim() : undefined,
+            selector: snapshot ? selector : undefined,
+            revision: snapshot ? revision.trim() : undefined,
+            hosts: hosts.length ? hosts : undefined,
+            paths: paths.length ? paths : undefined,
+          }
+        : {
+            adapter: adapterKey,
+            source_kind: fromProgram ? 'public' : sourceKind,
+            repo_url: sourceKind === 'installation' ? undefined : repoUrl.trim(),
+            installation_id: sourceKind === 'installation' ? installationId : undefined,
+            repo: sourceKind === 'installation' ? installRepo.trim() : undefined,
+            selector,
+            revision: revision.trim(),
+          },
     })
     setResolving(false)
     if (!res.data) {
-      toast.error(problem(res.error) ?? 'Could not resolve the repository')
+      toast.error(problem(res.error) ?? (isSite ? 'Could not read the site' : 'Could not resolve the repository'))
       return false
     }
     setTarget(res.data)
+    if (isSite) {
+      setResolvedKey(sourceKeyOf('site', repoUrl, '', '', snapshot ? res.data.revision.selector : selector, snapshot ? res.data.revision.value : revision, baseUrl))
+      if (snapshot) {
+        setSelector(res.data.revision.selector)
+        setRevision(res.data.revision.value)
+      }
+      setPrograms([])
+      setPending([])
+      setTree(null)
+      setSelected(new Set())
+      return true
+    }
     setResolvedKey(sourceKeyOf(sourceKind, repoUrl, installationId, installRepo, res.data.revision.selector, res.data.revision.value))
     setSelector(res.data.revision.selector)
     setRevision(res.data.revision.value)
@@ -232,7 +312,22 @@ export function NewAudit() {
     setTree(null)
     setSelected(new Set())
     return true
-  }, [sourceKind, repoUrl, installationId, installRepo, selector, revision, sourcePid, adapterKey, setTree, setSelected])
+  }, [isSite, baseUrl, hosts, paths, sourceKind, repoUrl, installationId, installRepo, selector, revision, sourcePid, adapterKey, setTree, setSelected])
+
+  // The scope is what the customer authorises; it is written to the target
+  // before the review so the pin and the audit read the same thing.
+  const saveScope = useCallback(async () => {
+    if (!target) return false
+    setSavingScope(true)
+    const res = await api.PUT('/v1/targets/{id}/scope', { params: { path: { id: target.id } }, body: { hosts: [originHost, ...hosts], paths } })
+    setSavingScope(false)
+    if (!res.data) {
+      toast.error(problem(res.error) ?? 'Could not save the scope')
+      return false
+    }
+    setTarget(res.data)
+    return true
+  }, [target, originHost, hosts, paths])
 
   // Typing is the trigger: a valid program id is looked up, and a valid source
   // is resolved, each after a short pause. Continue only moves on.
@@ -244,7 +339,7 @@ export function NewAudit() {
     return () => clearTimeout(t)
   }, [stepKey, sourceKind, sourcePid, lookup, looking, lookupProgram, adapterKey])
   useEffect(() => {
-    if (stepKey !== 'source' || !sourceValid || resolving || looking || resolvedKey === sourceKey) return
+    if ((stepKey !== 'source' && stepKey !== 'site') || !sourceValid || resolving || looking || resolvedKey === sourceKey) return
     const t = setTimeout(() => void resolveSource(), 700)
     return () => clearTimeout(t)
   }, [stepKey, sourceValid, resolving, looking, resolvedKey, sourceKey, resolveSource])
@@ -348,7 +443,7 @@ export function NewAudit() {
   )
 
   // A restored draft parked on scope or review has no tree in storage.
-  const needsTree = (stepKey === 'scope' || stepKey === 'review') && !!target && !tree
+  const needsTree = !isSite && (stepKey === 'scope' || stepKey === 'review') && !!target && !tree
   useEffect(() => {
     if (!needsTree) return
     const t = setTimeout(() => void loadTree(true), 0)
@@ -359,7 +454,9 @@ export function NewAudit() {
     if (!target) return
     setQueueing(true)
     const res = await api.POST('/v1/audits', {
-      body: { target_id: target.id, coverage, base_sha: coverage === 'diff' ? base.trim() || undefined : undefined, program_ids: programs.map((x) => x.id), files: [...selected] },
+      body: isSite
+        ? { target_id: target.id, coverage: 'full', program_ids: [], files: [] }
+        : { target_id: target.id, coverage, base_sha: coverage === 'diff' ? base.trim() || undefined : undefined, program_ids: programs.map((x) => x.id), files: [...selected] },
     })
     setQueueing(false)
     if (!res.data) {
@@ -381,10 +478,18 @@ export function NewAudit() {
     ? {
         repo: target.repo,
         commit: target.revision.commit,
-        base_sha: coverage === 'diff' && base.trim() ? base.trim() : undefined,
-        programs: programs.map((x) => ({ id: x.id, slot: x.last_deploy_slot ?? 0, match: x.verified_build, bytecode_sha256: x.bytecode_sha256 ?? '' })),
+        base_sha: !isSite && coverage === 'diff' && base.trim() ? base.trim() : undefined,
+        programs: isSite ? [] : programs.map((x) => ({ id: x.id, slot: x.last_deploy_slot ?? 0, match: x.verified_build, bytecode_sha256: x.bytecode_sha256 ?? '' })),
       }
     : null
+  // The scope a site is pinned to, as the backend will write it: every host
+  // under every prefix, the origin's host first.
+  const scopeHosts = useMemo(() => (originHost ? [originHost, ...hosts.filter((h) => h !== originHost)] : hosts), [originHost, hosts])
+  const scopeUrls = useMemo(() => {
+    const scheme = (target?.site?.origin ?? baseUrl).trim().startsWith('http://') ? 'http' : 'https'
+    return scopeHosts.flatMap((h) => (paths.length ? paths.map((p) => `${scheme}://${h}${p}`) : [`${scheme}://${h}/`]))
+  }, [scopeHosts, paths, target, baseUrl])
+  const words = chainWords(adapterKey)
 
   return (
     <Page wide>
@@ -395,8 +500,10 @@ export function NewAudit() {
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_300px]">
         <div className="flex flex-col rounded-md border border-border bg-card">
           <div className="border-b border-border px-6 py-4">
-            {adapter.isLoading ? (
+            {adapters.isLoading || adapter.isLoading ? (
               <Skeleton className="h-5 w-2/3" />
+            ) : adapters.isError ? (
+              <ProblemBadge error={adapters.error} onRetry={() => void adapters.refetch()} />
             ) : adapter.isError ? (
               <ProblemBadge error={adapter.error} onRetry={() => void adapter.refetch()} />
             ) : (
@@ -407,28 +514,21 @@ export function NewAudit() {
             {stepKey === 'target' && (
               <>
                 <Section label="target">
-                  <OptionCards
-                    value={kind}
-                    onChange={setKind}
-                    options={[
-                      { value: 'solana_program', label: 'Solana program', hint: 'mainnet' },
-                      { value: 'evm_contract', label: 'EVM contract', hint: 'ethereum · base · sepolia' },
-                      { value: 'framework', label: 'Framework or SDK', soon: true, disabled: true },
-                      { value: 'other', label: 'Something else', soon: true, disabled: true },
-                    ]}
-                  />
+                  <OptionCards value={kind} onChange={setKind} options={cards.map((c) => ({ value: c.value, label: c.label, hint: c.hint, soon: c.soon, disabled: c.disabled }))} />
                 </Section>
-                <Section label="coverage">
-                  <OptionCards
-                    columns={2}
-                    value={coverage}
-                    onChange={setCoverage}
-                    options={[
-                      { value: 'full', label: 'Full audit', hint: 'one commit' },
-                      { value: 'diff', label: 'Diff review', hint: 'base..head' },
-                    ]}
-                  />
-                </Section>
+                {hasCoverage && (
+                  <Section label="coverage">
+                    <OptionCards
+                      columns={2}
+                      value={coverage}
+                      onChange={setCoverage}
+                      options={[
+                        { value: 'full', label: 'Full audit', hint: 'one commit' },
+                        { value: 'diff', label: 'Diff review', hint: 'base..head' },
+                      ]}
+                    />
+                  </Section>
+                )}
               </>
             )}
 
@@ -544,6 +644,107 @@ export function NewAudit() {
               </>
             )}
 
+            {stepKey === 'site' && (
+              <>
+                <Section label={(originField?.label ?? 'origin').toLowerCase()}>
+                  <Input
+                    value={baseUrl}
+                    onChange={(e) => setBaseUrl(e.target.value)}
+                    placeholder="https://app.example.com"
+                    spellCheck={false}
+                    aria-label="Origin"
+                    className={cn('h-10 font-mono', baseUrl && !originRe.test(baseUrl.trim()) && 'border-bad')}
+                  />
+                </Section>
+                <Section label="repository">
+                  <Input
+                    value={repoUrl}
+                    onChange={(e) => setRepoUrl(e.target.value)}
+                    placeholder="https://github.com/org/repo"
+                    spellCheck={false}
+                    aria-label="Repository URL"
+                    className={cn('h-10 font-mono', repoUrl && !repoRe.test(repoUrl.trim()) && 'border-bad')}
+                  />
+                </Section>
+                {repoUrl.trim() !== '' && (
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-[160px_1fr]">
+                    <Section label="selector">
+                      <Select value={selector} onValueChange={(v) => v && setSelector(v as typeof selector)}>
+                        <SelectTrigger className="h-10" aria-label="Revision selector">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="branch">Branch</SelectItem>
+                          <SelectItem value="tag">Tag</SelectItem>
+                          <SelectItem value="commit">Commit</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </Section>
+                    <Section label={selector}>
+                      <Input
+                        value={revision}
+                        onChange={(e) => setRevision(e.target.value)}
+                        placeholder={selector === 'commit' ? 'sha' : selector === 'tag' ? 'v1.0.0' : 'main'}
+                        spellCheck={false}
+                        aria-label={`${selector} value`}
+                        className="h-10 font-mono"
+                      />
+                    </Section>
+                  </div>
+                )}
+                {resolving || !target || !resolved ? (
+                  (resolving || (target && resolved)) && (
+                    <div className="flex flex-wrap items-center gap-3 rounded-md border border-border px-4 py-3 font-mono text-xs">
+                      <StateBadge state="pending">reading</StateBadge>
+                    </div>
+                  )
+                ) : (
+                  <>
+                    {target.site && target.revision.commit && (
+                      <div className="flex flex-wrap items-center gap-3 rounded-md border border-border px-4 py-3 font-mono text-xs">
+                        <StateBadge state="ok">{target.repo}</StateBadge>
+                        <span className="text-muted-foreground">{short(target.revision.commit, 7, 0)}</span>
+                        {target.revision.author && <span className="text-muted-foreground">{target.revision.author}</span>}
+                        <span className="text-faint">{fmtDate(target.revision.date)}</span>
+                      </div>
+                    )}
+                    <SiteCard target={target} onChange={setTarget} />
+                  </>
+                )}
+              </>
+            )}
+
+            {stepKey === 'scope' && isSite && target && (
+              <>
+                <ListField
+                  label={(hostField?.label ?? 'hosts').toLowerCase()}
+                  fixed={originHost}
+                  fixedWord="origin"
+                  itemWord="subdomain"
+                  items={hosts}
+                  placeholder={`api.${originHost}`}
+                  valid={(h) => hostRe.test(h) && underHost(originHost, h) && h !== originHost}
+                  normalize={(h) => h.trim().toLowerCase()}
+                  onChange={setHosts}
+                />
+                <ListField
+                  label={(pathField?.label ?? 'path prefixes').toLowerCase()}
+                  itemWord="prefix"
+                  emptyWord="whole host"
+                  items={paths}
+                  placeholder="/api/"
+                  valid={(p) => pathRe.test(p) && p !== '/'}
+                  normalize={(p) => p.trim()}
+                  onChange={setPaths}
+                />
+                <div className="grid grid-cols-3 gap-3">
+                  <Stat label={words.programs} value={scopeHosts.length} hint={scopeHosts.length > 1 ? `${scopeHosts.length - 1} under ${originHost}` : originHost} />
+                  <Stat label={words.instructions} value={paths.length || 'all'} hint={paths.length ? 'prefixes' : 'every path'} />
+                  <Stat label="pinned" value={scopeUrls.length} hint="url prefixes" />
+                </div>
+              </>
+            )}
+
             {stepKey === 'programs' && target && (
               <>
                 {chainField && (
@@ -608,6 +809,7 @@ export function NewAudit() {
             )}
 
             {stepKey === 'scope' &&
+              !isSite &&
               (tree ? (
                 <>
                   <div className="flex flex-wrap items-end justify-between gap-4">
@@ -630,13 +832,39 @@ export function NewAudit() {
                 </div>
               ))}
 
-            {stepKey === 'review' && target && pin && (
+            {stepKey === 'review' && target && pin && isSite && (
               <div className="flex flex-col gap-6">
                 <div className="rounded-md border border-border px-4 py-3">
-                  <Pin pin={pin} />
+                  <Pin pin={pin} adapter={adapterKey} />
                 </div>
                 <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-                  <Stat label={chainWords(adapterKey).programs} value={programs.length} hint={programs.map((x) => short(x.id, 4, 4)).join(' ')} />
+                  <Stat label={words.programs} value={scopeHosts.length} hint={scopeHosts.length > 1 ? `${scopeHosts.length - 1} under ${originHost}` : originHost} />
+                  <Stat label={words.instructions} value={paths.length || 'all'} hint={paths.length ? 'prefixes' : 'every path'} />
+                  <Stat label="cost" value={costKind === 'slot' ? 'slot' : '1'} hint={costKind === 'slot' ? 'today' : 'credit'} tone={canRun ? undefined : 'warn'} />
+                  <Stat label="eta" value="24h" />
+                </div>
+                <div className="flex flex-col gap-2">
+                  {scopeUrls.map((u, i) => (
+                    <div key={u} className="flex flex-wrap items-center gap-3 rounded-md border border-border px-4 py-2.5 font-mono text-xs">
+                      <span className="break-all">{u}</span>
+                      <StateBadge state={i === 0 ? 'ok' : 'neutral'}>{hostOf(u) === originHost ? 'origin' : 'subdomain'}</StateBadge>
+                    </div>
+                  ))}
+                  <div className="flex flex-wrap items-center gap-3 rounded-md border border-border px-4 py-2.5 font-mono text-xs">
+                    <span className="text-muted-foreground">ownership</span>
+                    <StateBadge state={target.site?.ownership_proven ? 'ok' : 'neutral'}>{target.site?.ownership_proven ? (target.site.ownership_method === 'dns_txt' ? 'dns' : 'well-known') : 'not proven'}</StateBadge>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {stepKey === 'review' && target && pin && !isSite && (
+              <div className="flex flex-col gap-6">
+                <div className="rounded-md border border-border px-4 py-3">
+                  <Pin pin={pin} adapter={adapterKey} />
+                </div>
+                <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                  <Stat label={words.programs} value={programs.length} hint={programs.map((x) => short(x.id, 4, 4)).join(' ')} />
                   <Stat label="files" value={selected.size} hint={`${selectedLines.toLocaleString('en-US')} code lines`} />
                   <Stat label="cost" value={costKind === 'slot' ? 'slot' : '1'} hint={costKind === 'slot' ? 'today' : 'credit'} tone={canRun ? undefined : 'warn'} />
                   <Stat label="eta" value="24h" />
@@ -667,7 +895,7 @@ export function NewAudit() {
                 Continue <ArrowRight className="size-4" />
               </Button>
             )}
-            {stepKey === 'source' && (
+            {(stepKey === 'source' || stepKey === 'site') && (
               <Button
                 disabled={resolving || looking || !(resolved || sourceValid)}
                 onClick={async () => {
@@ -688,14 +916,24 @@ export function NewAudit() {
                 Prepare scope <ArrowRight className="size-4" />
               </Button>
             )}
-            {stepKey === 'scope' && !last && (
+            {stepKey === 'scope' && !last && !isSite && (
               <Button disabled={!tree || selected.size === 0 || overCap} onClick={() => setStep(step + 1)}>
                 Review <ArrowRight className="size-4" />
               </Button>
             )}
+            {stepKey === 'scope' && !last && isSite && (
+              <Button
+                disabled={!target || savingScope}
+                onClick={async () => {
+                  if (await saveScope()) setStep(step + 1)
+                }}
+              >
+                {savingScope ? <Mark size={16} className="animate-[spin_6s_linear_infinite]" /> : null} Review <ArrowRight className="size-4" />
+              </Button>
+            )}
             {stepKey === 'review' &&
               (canRun ? (
-                <Button disabled={queueing || overCap || !tree} onClick={() => void queue()}>
+                <Button disabled={queueing || (!isSite && (overCap || !tree))} onClick={() => void queue()}>
                   {queueing ? <Mark size={16} className="animate-[spin_6s_linear_infinite]" /> : null} Queue audit <ArrowRight className="size-4" />
                 </Button>
               ) : (
@@ -711,13 +949,25 @@ export function NewAudit() {
             <span className="label-caps">order</span>
             <span className="num text-2xl">1 audit</span>
             <dl className="flex flex-col gap-2 border-t border-border pt-4 text-xs">
-              <Row k="target" v={adapterKey === 'ethereum' ? 'EVM contract' : 'Solana program'} />
-              <Row k="coverage" v={coverage} />
-              <Row k="source" v={target ? target.repo : sourceKind === 'installation' ? 'GitHub App' : 'GitHub'} />
-              <Row k="commit" v={target ? short(target.revision.commit, 7, 0) : '-'} />
-              {coverage === 'diff' && <Row k="base" v={base.trim() ? short(base.trim(), 7, 0) : '-'} />}
-              <Row k={chainWords(adapterKey).programs} v={programs.length ? String(programs.length) : 'none · source only'} />
-              <Row k="scope" v={tree ? `${selected.size} files` : '-'} />
+              <Row k="target" v={card?.label ?? '-'} />
+              {hasCoverage && <Row k="coverage" v={coverage} />}
+              {isSite ? (
+                <>
+                  <Row k="site" v={originHost || '-'} />
+                  <Row k="snapshot" v={target?.revision.commit ? `${target.repo} ${short(target.revision.commit, 7, 0)}` : 'none · live only'} />
+                  <Row k={words.programs} v={originHost ? String(scopeHosts.length) : '-'} />
+                  <Row k={words.instructions} v={paths.length ? String(paths.length) : 'all'} />
+                  <Row k="ownership" v={target?.site?.ownership_proven ? 'proven' : 'not proven'} />
+                </>
+              ) : (
+                <>
+                  <Row k="source" v={target ? target.repo : sourceKind === 'installation' ? 'GitHub App' : 'GitHub'} />
+                  <Row k="commit" v={target ? short(target.revision.commit, 7, 0) : '-'} />
+                  {coverage === 'diff' && <Row k="base" v={base.trim() ? short(base.trim(), 7, 0) : '-'} />}
+                  <Row k={words.programs} v={programs.length ? String(programs.length) : 'none · source only'} />
+                  <Row k="scope" v={tree ? `${selected.size} files` : '-'} />
+                </>
+              )}
               <Row k="eta" v="24h" />
               <Row k="pays with" v={canRun ? (costKind === 'slot' ? 'daily slot' : '1 credit') : 'no credits'} tone={canRun ? undefined : 'warn'} />
             </dl>
@@ -799,6 +1049,86 @@ function ProgramRail({
         })}
       </ul>
     </div>
+  )
+}
+
+// A list the customer writes: a fixed first entry when there is one, the
+// entries added so far with a remove mark, and the input that adds one.
+// Membership is the whole control; what an entry is reads from its badge.
+function ListField({
+  label,
+  fixed,
+  fixedWord,
+  itemWord,
+  emptyWord,
+  items,
+  placeholder,
+  valid,
+  normalize,
+  onChange,
+}: {
+  label: string
+  fixed?: string
+  fixedWord?: string
+  itemWord: string
+  emptyWord?: string
+  items: string[]
+  placeholder: string
+  valid: (v: string) => boolean
+  normalize: (v: string) => string
+  onChange: (items: string[]) => void
+}) {
+  const [draft, setDraft] = useState('')
+  const value = normalize(draft)
+  const ok = value !== '' && valid(value) && !items.includes(value)
+  function add() {
+    if (!ok) return
+    onChange([...items, value])
+    setDraft('')
+  }
+  return (
+    <Section label={label}>
+      <ul className="flex flex-col gap-0.5 rounded-md border border-border bg-card p-1.5">
+        {fixed && (
+          <li className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded px-2 py-1.5 font-mono text-[12.5px]">
+            <span className="truncate">{fixed}</span>
+            <StateBadge state="ok">{fixedWord}</StateBadge>
+          </li>
+        )}
+        {items.map((x) => (
+          <li key={x} className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-2 rounded px-2 py-1 font-mono text-[12.5px] hover:bg-accent/40">
+            <span className="truncate">{x}</span>
+            <StateBadge state="neutral">{itemWord}</StateBadge>
+            <Button size="icon-xs" variant="ghost" onClick={() => onChange(items.filter((y) => y !== x))} aria-label={`Remove ${x}`}>
+              <X className="size-3.5" />
+            </Button>
+          </li>
+        ))}
+        {!fixed && items.length === 0 && emptyWord && (
+          <li className="px-2 py-1.5">
+            <StateBadge state="neutral">{emptyWord}</StateBadge>
+          </li>
+        )}
+      </ul>
+      <div className="flex gap-2">
+        <Input
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          placeholder={placeholder}
+          spellCheck={false}
+          aria-label={label}
+          className={cn('h-10 font-mono', draft && !ok && 'border-bad')}
+          onKeyDown={(e) => {
+            if (e.key !== 'Enter') return
+            e.preventDefault()
+            add()
+          }}
+        />
+        <Button className="h-10" disabled={!ok} onClick={add}>
+          <Plus className="size-4" /> Add
+        </Button>
+      </div>
+    </Section>
   )
 }
 

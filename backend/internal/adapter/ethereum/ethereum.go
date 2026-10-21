@@ -183,7 +183,7 @@ func (a *Adapter) IntakeSteps() []core.StepSpec {
 	return []core.StepSpec{
 		{Key: "target", Title: "Target", Fields: []core.FieldSpec{
 			{Key: "kind", Kind: core.FieldCards, Label: "Target", Required: true, Options: []core.Option{
-				{Value: "evm_contract", Label: "EVM contract"},
+				{Value: "evm_contract", Label: "EVM contract", Hint: "ethereum · base · sepolia"},
 			}},
 			{Key: "coverage", Kind: core.FieldCards, Label: "Coverage", Required: true, Options: []core.Option{
 				{Value: "full", Label: "Full audit"},

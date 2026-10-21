@@ -90,7 +90,7 @@ One action that installs the GitHub App and, if the user is not signed in with G
 ### 4.4 New audit wizard (Solana adapter)
 Five steps, sticky order summary on the right. Steps come from the adapter (§8).
 
-1. **Target** - cards: Solana program (adapter one), EVM contract (adapter two), others greyed as "soon". Coverage: Full or Diff.
+1. **Target** - cards: Solana program (adapter one), EVM contract (adapter two), Web app (adapter three), others greyed as "soon". Coverage: Full or Diff, when the adapter offers it.
 2. **Source** - cards: Public GitHub, Connect GitHub (or installation picker if connected). URL field with branch/tag/commit selector. On validation: repo card with default branch, resolved commit, author, date. Diff coverage adds base and head.
 3. **Programs** - program ID input, Fetch. Each fetched program renders a verification panel (§7). Declared ID in source matched to the entered ID. Verified-build badge. Ownership badge with "Prove" button (sign nonce with upgrade authority). Multiple programs allowed within the tier cap.
 4. **Scope** - file tree, program files auto-selected, lockfiles/tests/config unselected. A meter shows lines in scope against the tier cap. Clear / Select all.
@@ -241,6 +241,21 @@ Same five steps; contracts and a chain where programs were. Chains served: Ether
 
 The Solidity scan is pattern-based like the Rust one: contracts with their inheritance, every external or public function with the selector its canonical signature implies (structs as tuples, enums as uint8, contracts and unknown types as address, user-defined value types as what they wrap), events with topics, and the sites a reviewer looks for first (calls, delegatecalls, transfers, assembly, unchecked, selfdestruct). Tests, scripts and vendored libraries are skipped. Selectors that nobody verified are named through the 4byte directory.
 
+### Web adapter (adapter three) - the site panel
+
+Four steps: target, site, scope, review. A site is a live origin where a repository was; an optional public repository and revision stay as the snapshot the operator reads. The scope step is the consent §12 and §20 require: the hosts the review may probe (the origin's host always, the rest only its subdomains) and the path prefixes it may walk on each one; the target keeps the scope and the audit is pinned to it as URL prefixes, no programs, no lines, full coverage only.
+
+| Row | Source | States |
+|---|---|---|
+| Site | one GET of the origin | status (2xx, 3xx ok; 4xx, 5xx check) / unreachable |
+| Scheme | the origin | https / http (check) |
+| Redirects to | where the GET landed | none / another origin (check) |
+| Server | the Server header | its value / unnamed |
+| HSTS | Strict-Transport-Security | present / absent (check) |
+| Ownership | nonce found at `_vig.<host>` TXT or in `/.well-known/vig-verify.txt` | proven (dns, well-known) / not proven, with the prove action |
+
+The nonce is issued per target and lives a day; the backend reads both places with plain lookups and the first hit wins. Nothing is crawled at intake: the one GET of the origin is the whole read until the audit is queued inside the scope.
+
 ---
 
 ## 8. Target adapter interface
@@ -257,7 +272,7 @@ type Adapter interface {
 }
 ```
 
-The wizard engine renders `StepSpec` (cards, inputs, tree, meter) and calls Validate/Verify. Adding a chain or a web-app target later is a new package and a new card. The core, ledger, jobs, reports, and findings never change.
+The wizard engine renders `StepSpec` (cards, inputs, tree, meter, list) and calls Validate/Verify. The target cards are every adapter's target options, read from `/v1/adapters`; a `site` step marks a live target, a `source` step a repository, and the engine never names an adapter. Adding a chain or a web-app target is a new package and a new card. The core, ledger, jobs, reports, and findings never change.
 
 ---
 

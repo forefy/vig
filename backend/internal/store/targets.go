@@ -26,7 +26,15 @@ type Target struct {
 	CommitAuthor   string
 	CommitDate     time.Time
 	BaseURL        string
-	CreatedAt      time.Time
+	// A web target: what the customer authorised, what the intake read,
+	// and the nonce proof, where a program keeps the same on its own row.
+	Scope             core.SiteScope
+	Panel             *core.VerificationPanel
+	OwnershipNonce    string
+	OwnershipNonceAt  *time.Time
+	OwnershipProvenAt *time.Time
+	OwnershipMethod   string
+	CreatedAt         time.Time
 }
 
 // Program is a target_programs row.
@@ -61,24 +69,64 @@ type Installation struct {
 	Status         string
 }
 
-const targetCols = `id, adapter, coalesce(owner_user_id::text,''), source_kind, repo_full_name, subpath, coalesce(installation_id::text,''), selector, revision, commit_sha, coalesce(commit_author,''), coalesce(commit_date, to_timestamp(0)), base_url, created_at`
+const targetCols = `id, adapter, coalesce(owner_user_id::text,''), source_kind, repo_full_name, subpath, coalesce(installation_id::text,''), selector, revision, commit_sha, coalesce(commit_author,''), coalesce(commit_date, to_timestamp(0)), base_url, scope, panel, coalesce(ownership_nonce,''), ownership_nonce_at, ownership_proven_at, coalesce(ownership_method,''), created_at`
 
 func scanTarget(row pgx.Row) (Target, error) {
 	var t Target
-	err := row.Scan(&t.ID, &t.Adapter, &t.OwnerUserID, &t.SourceKind, &t.Repo, &t.Subpath, &t.InstallationID, &t.Selector, &t.Revision, &t.CommitSHA, &t.CommitAuthor, &t.CommitDate, &t.BaseURL, &t.CreatedAt)
-	return t, wrap(err)
+	var scope, panel []byte
+	err := row.Scan(&t.ID, &t.Adapter, &t.OwnerUserID, &t.SourceKind, &t.Repo, &t.Subpath, &t.InstallationID, &t.Selector, &t.Revision, &t.CommitSHA, &t.CommitAuthor, &t.CommitDate, &t.BaseURL,
+		&scope, &panel, &t.OwnershipNonce, &t.OwnershipNonceAt, &t.OwnershipProvenAt, &t.OwnershipMethod, &t.CreatedAt)
+	if err != nil {
+		return t, wrap(err)
+	}
+	if len(scope) > 0 {
+		_ = json.Unmarshal(scope, &t.Scope)
+	}
+	if len(panel) > 0 {
+		var p core.VerificationPanel
+		if json.Unmarshal(panel, &p) == nil {
+			t.Panel = &p
+		}
+	}
+	return t, nil
 }
 
 // CreateTarget stores a resolved target.
 func (s *Store) CreateTarget(ctx context.Context, t Target) (Target, error) {
 	id := NewID()
-	_, err := s.Pool.Exec(ctx, `insert into targets(id, adapter, owner_user_id, source_kind, repo_full_name, subpath, installation_id, selector, revision, commit_sha, commit_author, commit_date, base_url)
-		values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
-		id, t.Adapter, nullStr(t.OwnerUserID), t.SourceKind, t.Repo, t.Subpath, nullStr(t.InstallationID), t.Selector, t.Revision, t.CommitSHA, nullStr(t.CommitAuthor), ptrTime(t.CommitDate), t.BaseURL)
+	scope, _ := json.Marshal(t.Scope)
+	var panel []byte
+	if t.Panel != nil {
+		panel, _ = json.Marshal(t.Panel)
+	}
+	_, err := s.Pool.Exec(ctx, `insert into targets(id, adapter, owner_user_id, source_kind, repo_full_name, subpath, installation_id, selector, revision, commit_sha, commit_author, commit_date, base_url, scope, panel)
+		values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
+		id, t.Adapter, nullStr(t.OwnerUserID), t.SourceKind, t.Repo, t.Subpath, nullStr(t.InstallationID), t.Selector, t.Revision, t.CommitSHA, nullStr(t.CommitAuthor), ptrTime(t.CommitDate), t.BaseURL, scope, panel)
 	if err != nil {
 		return Target{}, err
 	}
 	return s.GetTarget(ctx, id)
+}
+
+// SetTargetScope replaces what the customer authorised on a web target.
+func (s *Store) SetTargetScope(ctx context.Context, id string, scope core.SiteScope) error {
+	b, _ := json.Marshal(scope)
+	_, err := s.Pool.Exec(ctx, `update targets set scope=$2 where id=$1`, id, b)
+	return err
+}
+
+// SetTargetOwnershipNonce issues a nonce the site must carry.
+func (s *Store) SetTargetOwnershipNonce(ctx context.Context, id, nonce string) error {
+	_, err := s.Pool.Exec(ctx, `update targets set ownership_nonce=$2, ownership_nonce_at=now() where id=$1`, id, nonce)
+	return err
+}
+
+// SetTargetOwnershipProven records where the nonce was found and the
+// panel with its ownership row rewritten.
+func (s *Store) SetTargetOwnershipProven(ctx context.Context, id, method string, panel core.VerificationPanel) error {
+	b, _ := json.Marshal(panel)
+	_, err := s.Pool.Exec(ctx, `update targets set ownership_proven_at=now(), ownership_method=$2, ownership_nonce=null, ownership_nonce_at=null, panel=$3 where id=$1`, id, method, b)
+	return err
 }
 
 // GetTarget fetches a target.

@@ -1558,6 +1558,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/targets/{id}/ownership/nonce": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Nonce to place in DNS or under /.well-known */
+        post: operations["siteOwnershipNonce"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/targets/{id}/ownership/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Prove ownership of the site */
+        post: operations["siteOwnershipVerify"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/targets/{id}/programs": {
         parameters: {
             query?: never;
@@ -1620,6 +1654,23 @@ export interface paths {
         put?: never;
         /** Prove ownership */
         post: operations["ownershipVerify"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/targets/{id}/scope": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Hosts and path prefixes the review may probe */
+        put: operations["setTargetScope"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -2087,7 +2138,9 @@ export interface components {
             base_sha?: string;
             /** @enum {string} */
             coverage: "full" | "diff";
+            /** @description Files in scope on a chain target; on a site, left out: the scope is the target's hosts and prefixes */
             files: string[] | null;
+            /** @description Programs on the target to review; at least one on a chain target, none on a site */
             program_ids: string[] | null;
             target_id: string;
         };
@@ -2133,22 +2186,29 @@ export interface components {
              * @example https://example.com/schemas/CreateTargetInBody.json
              */
             readonly $schema?: string;
-            /** @enum {string} */
-            adapter: "solana" | "ethereum" | "webapp";
+            /** @description An adapter key from /v1/adapters */
+            adapter: string;
             /**
              * Format: uri
-             * @description For webapp targets, the site origin the audit is about
+             * @description For a site, the origin the audit is about: scheme and host
              */
             base_url?: string;
+            /** @description For a site, the hosts the review may probe; the origin's host is always among them */
+            hosts?: string[] | null;
             installation_id?: string;
+            /** @description For a site, the path prefixes the review may walk on every scoped host */
+            paths?: string[] | null;
             /** @description owner/name when using an installation */
             repo?: string;
             repo_url?: string;
-            revision: string;
+            revision?: string;
             /** @enum {string} */
-            selector: "branch" | "tag" | "commit";
-            /** @enum {string} */
-            source_kind: "public" | "installation";
+            selector?: "branch" | "tag" | "commit";
+            /**
+             * @description Where the repository comes from; a site without one leaves it out
+             * @enum {string}
+             */
+            source_kind?: "public" | "installation";
         };
         CreditInBody: {
             /**
@@ -2933,6 +2993,8 @@ export interface components {
         };
         Option: {
             disabled?: boolean;
+            /** @description One short fact under the label, e.g. the chains served */
+            hint?: string;
             label: string;
             soon?: boolean;
             value: string;
@@ -3372,6 +3434,35 @@ export interface components {
             /** @description At most one attachment for this step, shown under its code: a capture, a recording or a file, served from the stored bytes by id */
             visuals?: components["schemas"]["Visual"][] | null;
         };
+        SiteNonceOutBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/SiteNonceOutBody.json
+             */
+            readonly $schema?: string;
+            /** @description TXT record name to create */
+            dns_name: string;
+            /** Format: date-time */
+            expires_at: string;
+            /** @description Where the file must answer */
+            file_url: string;
+            nonce: string;
+            /** @description The TXT record's value, and the file's whole body */
+            value: string;
+        };
+        SiteScope: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/SiteScope.json
+             */
+            readonly $schema?: string;
+            /** @description Hosts the review may probe; the origin's host is always among them */
+            hosts: string[] | null;
+            /** @description Path prefixes the review may walk on every scoped host; none means the whole host */
+            paths?: string[] | null;
+        };
         SiwsNonceInBody: {
             /**
              * Format: uri
@@ -3690,7 +3781,7 @@ export interface components {
             adapter: string;
             /**
              * Format: uri
-             * @description For webapp targets, the site origin the audit is about
+             * @description For a site, the origin the audit is about
              */
             base_url?: string;
             /** Format: date-time */
@@ -3707,8 +3798,21 @@ export interface components {
             revision: components["schemas"]["Revision"];
             /** @description The checkout has been read; declared is complete */
             scanned: boolean;
+            /** @description Present on a live target: its scope, its intake panel and its ownership proof */
+            site?: components["schemas"]["TargetSite"];
             /** @enum {string} */
             source_kind: "public" | "installation";
+        };
+        TargetSite: {
+            /** Format: uri */
+            origin: string;
+            /** @enum {string} */
+            ownership_method?: "dns_txt" | "well_known_file";
+            ownership_proven: boolean;
+            /** Format: date-time */
+            ownership_proven_at?: string;
+            panel: components["schemas"]["VerificationPanel"];
+            scope: components["schemas"]["SiteScope"];
         };
         TokenMove: {
             /** Format: int64 */
@@ -7118,6 +7222,68 @@ export interface operations {
             };
         };
     };
+    siteOwnershipNonce: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SiteNonceOutBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    siteOwnershipVerify: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Target"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     addProgram: {
         parameters: {
             query?: never;
@@ -7238,6 +7404,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Program"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    setTargetScope: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SiteScope"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Target"];
                 };
             };
             /** @description Error */

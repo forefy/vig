@@ -21,6 +21,7 @@ const (
 type Option struct {
 	Value    string `json:"value"`
 	Label    string `json:"label"`
+	Hint     string `json:"hint,omitempty" doc:"One short fact under the label, e.g. the chains served"`
 	Disabled bool   `json:"disabled,omitempty"`
 	Soon     bool   `json:"soon,omitempty"`
 }

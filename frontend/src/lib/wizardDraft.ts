@@ -20,6 +20,9 @@ export type WizardDraft = {
   selector: 'branch' | 'tag' | 'commit'
   revision: string
   base: string
+  base_url?: string
+  hosts?: string[]
+  paths?: string[]
   target: Target | null
   programs: Program[]
   selected: string[]

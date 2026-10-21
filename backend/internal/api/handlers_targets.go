@@ -19,14 +19,16 @@ import (
 
 type createTargetIn struct {
 	Body struct {
-		Adapter        string `json:"adapter" enum:"solana,ethereum,webapp"`
-		BaseURL        string `json:"base_url,omitempty" format:"uri" doc:"For webapp targets, the site origin the audit is about"`
-		SourceKind     string `json:"source_kind" enum:"public,installation"`
-		RepoURL        string `json:"repo_url,omitempty"`
-		InstallationID string `json:"installation_id,omitempty"`
-		Repo           string `json:"repo,omitempty" doc:"owner/name when using an installation"`
-		Selector       string `json:"selector" enum:"branch,tag,commit"`
-		Revision       string `json:"revision"`
+		Adapter        string   `json:"adapter" doc:"An adapter key from /v1/adapters"`
+		BaseURL        string   `json:"base_url,omitempty" format:"uri" doc:"For a site, the origin the audit is about: scheme and host"`
+		Hosts          []string `json:"hosts,omitempty" doc:"For a site, the hosts the review may probe; the origin's host is always among them"`
+		Paths          []string `json:"paths,omitempty" doc:"For a site, the path prefixes the review may walk on every scoped host"`
+		SourceKind     string   `json:"source_kind,omitempty" enum:"public,installation" doc:"Where the repository comes from; a site without one leaves it out"`
+		RepoURL        string   `json:"repo_url,omitempty"`
+		InstallationID string   `json:"installation_id,omitempty"`
+		Repo           string   `json:"repo,omitempty" doc:"owner/name when using an installation"`
+		Selector       string   `json:"selector,omitempty" enum:"branch,tag,commit"`
+		Revision       string   `json:"revision,omitempty"`
 	}
 }
 
@@ -92,6 +94,7 @@ func (d *Deps) registerTargets(api huma.API) {
 	huma.Register(api, withAuth(op("ownershipNonce", http.MethodPost, "/v1/targets/{id}/programs/{pid}/ownership/nonce", "Nonce to sign with the upgrade authority", "targets"), userAuth), d.ownershipNonce)
 	huma.Register(api, withAuth(op("ownershipVerify", http.MethodPost, "/v1/targets/{id}/programs/{pid}/ownership/verify", "Prove ownership", "targets"), userAuth), d.ownershipVerify)
 	huma.Register(api, withAuth(op("getTree", http.MethodGet, "/v1/targets/{id}/tree", "File tree with auto selection", "targets"), userAuth), d.getTree)
+	d.registerSites(api)
 }
 
 // tier returns the caps that apply to the user: Pro while a plan is active,
@@ -134,41 +137,17 @@ func (d *Deps) createTarget(ctx context.Context, in *createTargetIn) (*body[Targ
 	if err != nil {
 		return nil, err
 	}
-	// A webapp target is a live website. There is no chain to read and no
-	// checkout to clone: the origin is the subject, and an optional repo
-	// and commit stay as a source-snapshot reference, taken as given.
-	if in.Body.Adapter == "webapp" {
-		base := strings.TrimSpace(in.Body.BaseURL)
-		if base == "" {
-			return nil, huma.Error400BadRequest("webapp targets need base_url")
-		}
-		if !strings.HasPrefix(base, "http://") && !strings.HasPrefix(base, "https://") {
-			return nil, huma.Error400BadRequest("base_url must be an http(s) origin")
-		}
-		repo := strings.TrimSpace(in.Body.Repo)
-		if repo == "" {
-			repo = base
-		}
-		rev := strings.TrimSpace(in.Body.Revision)
-		selector := in.Body.Selector
-		if selector == "" {
-			selector = "commit"
-		}
-		t, err := d.Store.CreateTarget(ctx, store.Target{
-			Adapter: "webapp", OwnerUserID: u.ID, SourceKind: in.Body.SourceKind, Repo: repo,
-			Selector: selector, Revision: rev, CommitSHA: rev, BaseURL: base,
-		})
-		if err != nil {
-			return nil, fail(err)
-		}
-		out, err := d.toTarget(ctx, t)
-		if err != nil {
-			return nil, err
-		}
-		return &body[Target]{Body: out}, nil
-	}
-	if _, ok := d.Adapters[in.Body.Adapter]; !ok {
+	adapter, ok := d.Adapters[in.Body.Adapter]
+	if !ok {
 		return nil, huma.Error400BadRequest("unknown adapter " + in.Body.Adapter)
+	}
+	// The adapter's steps say what a target is: a site step makes it a
+	// live origin (handlers_sites.go), a source step a repository.
+	if hasStep(adapter, StepSite) {
+		return d.createSiteTarget(ctx, u, adapter, in)
+	}
+	if in.Body.SourceKind == "" {
+		return nil, huma.Error400BadRequest("source_kind is required")
 	}
 	if err := d.sourceReady(); err != nil {
 		return nil, err

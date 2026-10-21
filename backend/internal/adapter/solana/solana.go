@@ -77,7 +77,7 @@ func (a *Adapter) IntakeSteps() []core.StepSpec {
 	return []core.StepSpec{
 		{Key: "target", Title: "Target", Fields: []core.FieldSpec{
 			{Key: "kind", Kind: core.FieldCards, Label: "Target", Required: true, Options: []core.Option{
-				{Value: "solana_program", Label: "Solana program"},
+				{Value: "solana_program", Label: "Solana program", Hint: "mainnet"},
 				{Value: "framework", Label: "Framework or SDK", Soon: true, Disabled: true},
 				{Value: "other", Label: "Something else", Soon: true, Disabled: true},
 			}},

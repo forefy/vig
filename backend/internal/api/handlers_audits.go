@@ -21,8 +21,8 @@ type createAuditIn struct {
 		TargetID   string   `json:"target_id"`
 		Coverage   string   `json:"coverage" enum:"full,diff"`
 		BaseSHA    string   `json:"base_sha,omitempty"`
-		ProgramIDs []string `json:"program_ids" minItems:"1"`
-		Files      []string `json:"files" minItems:"1"`
+		ProgramIDs []string `json:"program_ids" doc:"Programs on the target to review; at least one on a chain target, none on a site"`
+		Files      []string `json:"files" doc:"Files in scope on a chain target; on a site, left out: the scope is the target's hosts and prefixes"`
 	}
 }
 
@@ -105,6 +105,43 @@ func (d *Deps) createAudit(ctx context.Context, in *createAuditIn) (*body[Audit]
 	t, u, err := d.ownedTarget(ctx, in.Body.TargetID)
 	if err != nil {
 		return nil, err
+	}
+	// A site is pinned to what the customer authorised: its scope as URL
+	// prefixes, no programs, no lines. Without a source snapshot the head
+	// is the target itself, so two submissions of one pass dedupe and a
+	// later look at the live site is a new target.
+	if d.isSite(t) {
+		if len(in.Body.ProgramIDs) > 0 {
+			return nil, huma.Error400BadRequest("a site has no programs")
+		}
+		if in.Body.Coverage == "diff" {
+			return nil, huma.Error400BadRequest("a site takes a full audit")
+		}
+		scope := t.Scope.Normalize(originHost(t.BaseURL))
+		for _, f := range in.Body.Files {
+			if !scope.Allows(f) {
+				return nil, huma.Error400BadRequest("outside the authorised scope: " + f)
+			}
+		}
+		head := t.CommitSHA
+		if head == "" {
+			head = t.ID
+		}
+		a, _, err := d.Store.QueueAudit(ctx, store.Audit{UserID: u.ID, TargetID: t.ID, Coverage: "full", HeadSHA: head, ProgramIDs: []string{}, Scope: store.Scope{Files: scope.URLs(t.BaseURL), Lines: 0}})
+		if err != nil {
+			return nil, fail(err)
+		}
+		out, err := d.auditWithEvents(ctx, a)
+		if err != nil {
+			return nil, fail(err)
+		}
+		return &body[Audit]{Body: out}, nil
+	}
+	if len(in.Body.ProgramIDs) == 0 {
+		return nil, huma.Error400BadRequest("program_ids: at least one program")
+	}
+	if len(in.Body.Files) == 0 {
+		return nil, huma.Error400BadRequest("files: at least one file")
 	}
 	base := ""
 	if in.Body.Coverage == "diff" {

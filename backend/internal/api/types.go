@@ -120,7 +120,8 @@ type Installation struct {
 type Target struct {
 	ID             string       `json:"id"`
 	Adapter        string       `json:"adapter"`
-	BaseURL        string       `json:"base_url,omitempty" format:"uri" doc:"For webapp targets, the site origin the audit is about"`
+	BaseURL        string       `json:"base_url,omitempty" format:"uri" doc:"For a site, the origin the audit is about"`
+	Site           *TargetSite  `json:"site,omitempty" doc:"Present on a live target: its scope, its intake panel and its ownership proof"`
 	SourceKind     string       `json:"source_kind" enum:"public,installation"`
 	Repo           string       `json:"repo" doc:"owner/name"`
 	Path           string       `json:"path,omitempty" doc:"Subdirectory from a /tree/<rev>/<path> URL"`
@@ -130,6 +131,17 @@ type Target struct {
 	Declared       []DeclaredID `json:"declared" doc:"Program ids the source declares (declare_id!, Anchor.toml); a fact even before deployment"`
 	Scanned        bool         `json:"scanned" doc:"The checkout has been read; declared is complete"`
 	CreatedAt      time.Time    `json:"created_at"`
+}
+
+// TargetSite is a live target's half of Target: what the customer authorised
+// and what the intake read. The origin stands where a program stands.
+type TargetSite struct {
+	Origin            string                 `json:"origin" format:"uri"`
+	Scope             core.SiteScope         `json:"scope"`
+	Panel             core.VerificationPanel `json:"panel"`
+	OwnershipProven   bool                   `json:"ownership_proven"`
+	OwnershipMethod   string                 `json:"ownership_method,omitempty" enum:"dns_txt,well_known_file"`
+	OwnershipProvenAt *time.Time             `json:"ownership_proven_at,omitempty"`
 }
 
 // DeclaredID is a program id named by the source and where.

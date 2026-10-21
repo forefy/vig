@@ -68,6 +68,8 @@ vig-op whatif --set-account <pubkey>='{"lamports":0}' --time 36h <sig>   # overr
 vig-op har --host app.example.com capture.har   # web targets: routes (ids folded to {id}), parameters, requests and referer nav edges from a proxy or browser capture
 ```
 
+A web job's `job.json` carries `target.site`: the origin, the hosts and path prefixes the customer authorised (`scope.files` on the audit is the same scope as URL prefixes) and whether ownership was proven. Nothing outside those prefixes is probed, whatever the capture shows.
+
 Replay uses `simulateTransaction` with signatures skipped and the blockhash replaced, on `VIG_RPC` (the public mainnet endpoint by default). Point `VIG_RPC` at a surfpool surfnet to replay against curated state; `whatif` uses its `surfnet_setAccount` and `surfnet_timeTravel` cheatcodes and refuses overrides anywhere else.
 
 ## Lessons

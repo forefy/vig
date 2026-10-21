@@ -23,6 +23,7 @@ import (
 
 	"github.com/forefy/vig/backend/internal/adapter/ethereum"
 	"github.com/forefy/vig/backend/internal/adapter/solana"
+	"github.com/forefy/vig/backend/internal/adapter/webapp"
 	"github.com/forefy/vig/backend/internal/api"
 	"github.com/forefy/vig/backend/internal/auth"
 	"github.com/forefy/vig/backend/internal/chain"
@@ -46,7 +47,7 @@ func main() {
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
 		case "openapi":
-			if err := api.WriteOpenAPI(os.Stdout, map[string]core.Adapter{solana.Key: solana.New(), ethereum.Key: ethereum.New()}); err != nil {
+			if err := api.WriteOpenAPI(os.Stdout, map[string]core.Adapter{solana.Key: solana.New(), ethereum.Key: ethereum.New(), webapp.Key: webapp.New()}); err != nil {
 				fatal(err)
 			}
 		case "migrate":
@@ -138,27 +139,28 @@ func deps(cfg config.Config, st *store.Store) *api.Deps {
 		fatal(err)
 	}
 	adapter := solana.NewWired(inspector, scan.NewDB(filepath.Join(cfg.DataDir, "advisories")))
-	adapters := map[string]core.Adapter{solana.Key: adapter, ethereum.Key: ethereum.NewWired(cfg.EVMRPC)}
+	adapters := map[string]core.Adapter{solana.Key: adapter, ethereum.Key: ethereum.NewWired(cfg.EVMRPC), webapp.Key: webapp.NewWired()}
 	// The operator's match result rewrites the adapter's panel rows so the
 	// badges and the columns never disagree.
 	st.PanelPatch = solana.MatchRows
 	discord := notify.NewDiscord(cfg.DiscordBotToken)
 	email := notify.NewEmail(cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPUser, cfg.SMTPPass, cfg.SMTPFrom)
 	return &api.Deps{
-		Config:    cfg,
-		Store:     st,
-		Signer:    auth.NewSigner(cfg.SessionSecret, cfg.IsProd()),
-		Providers: auth.Providers(cfg.GoogleClientID, cfg.GoogleClientSecret, cfg.GitHubClientID, cfg.GitHubClientSecret, cfg.DiscordClientID, cfg.DiscordClientSecret),
-		Chain:     rpc,
-		Inspector: inspector,
-		GitHub:    gh,
-		App:       app,
-		Adapters:  adapters,
-		Notifier:  notify.New(st, discord, email),
-		Discord:   discord,
-		Scans:     &jobs.ScanRunner{Store: st, GitHub: gh, Adapters: adapters},
-		HTTP:      &http.Client{Timeout: 30 * time.Second},
-		Now:       time.Now,
+		Config:       cfg,
+		Store:        st,
+		Signer:       auth.NewSigner(cfg.SessionSecret, cfg.IsProd()),
+		Providers:    auth.Providers(cfg.GoogleClientID, cfg.GoogleClientSecret, cfg.GitHubClientID, cfg.GitHubClientSecret, cfg.DiscordClientID, cfg.DiscordClientSecret),
+		Chain:        rpc,
+		Inspector:    inspector,
+		GitHub:       gh,
+		App:          app,
+		Adapters:     adapters,
+		AdapterOrder: []string{solana.Key, ethereum.Key, webapp.Key},
+		Notifier:     notify.New(st, discord, email),
+		Discord:      discord,
+		Scans:        &jobs.ScanRunner{Store: st, GitHub: gh, Adapters: adapters},
+		HTTP:         &http.Client{Timeout: 30 * time.Second},
+		Now:          time.Now,
 	}
 }
 

@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"net/http"
+	"sort"
 
 	"github.com/danielgtaylor/huma/v2"
 
@@ -87,6 +88,27 @@ type adapterInfo struct {
 	LocationKinds  []core.LocationKind     `json:"location_kinds"`
 }
 
+// adapterKeys lists the adapters in card order: AdapterOrder first, the
+// rest alphabetically.
+func (d *Deps) adapterKeys() []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, k := range d.AdapterOrder {
+		if _, ok := d.Adapters[k]; ok && !seen[k] {
+			seen[k] = true
+			out = append(out, k)
+		}
+	}
+	var rest []string
+	for k := range d.Adapters {
+		if !seen[k] {
+			rest = append(rest, k)
+		}
+	}
+	sort.Strings(rest)
+	return append(out, rest...)
+}
+
 func adapterOf(a core.Adapter) adapterInfo {
 	return adapterInfo{Key: a.Key(), Steps: a.IntakeSteps(), OwnershipProof: a.OwnershipProof(), LocationKinds: a.LocationKinds()}
 }
@@ -118,8 +140,8 @@ func (d *Deps) registerPublic(api huma.API) {
 	huma.Register(api, op("listAdapters", http.MethodGet, "/v1/adapters", "Target adapters and their intake steps", "public"),
 		func(ctx context.Context, _ *struct{}) (*body[list[adapterInfo]], error) {
 			out := []adapterInfo{}
-			for _, a := range d.Adapters {
-				out = append(out, adapterOf(a))
+			for _, k := range d.adapterKeys() {
+				out = append(out, adapterOf(d.Adapters[k]))
 			}
 			return items(out), nil
 		})

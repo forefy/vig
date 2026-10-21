@@ -37,10 +37,13 @@ type Deps struct {
 	GitHub    *github.Client
 	App       *github.App
 	Adapters  map[string]core.Adapter
-	Notifier  *notify.Notifier
-	Discord   *notify.Discord
-	Scans     *jobs.ScanRunner
-	HTTP      *http.Client
+	// AdapterOrder is how the target cards line up; keys left out follow
+	// alphabetically.
+	AdapterOrder []string
+	Notifier     *notify.Notifier
+	Discord      *notify.Discord
+	Scans        *jobs.ScanRunner
+	HTTP         *http.Client
 	// Now is the clock; tests override it.
 	Now func() time.Time
 	// BaseCtx is the process context fire-and-forget work runs under, so a
