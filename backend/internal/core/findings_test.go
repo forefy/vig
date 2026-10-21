@@ -248,22 +248,24 @@ func TestOneRecordingPerFinding(t *testing.T) {
 	}
 }
 
-func TestLocatedFindingNeedsPatchOrOperational(t *testing.T) {
+func TestLocatedFindingWithoutPatchIsAdvisedNotRefused(t *testing.T) {
 	d := sample()
 	d.Findings[0].FixKind = ""
 	d.Findings[0].Fix = "- require signer"
-	err := d.Validate()
-	if err == nil || !contains(err.Error(), "carries no patch") {
-		t.Fatalf("bare fix on a located finding passed: %v", err)
+	if err := d.Validate(); err != nil {
+		t.Fatalf("a bare fix on a located finding is allowed: %v", err)
+	}
+	if adv := d.Advise(); !containsAny(adv, "carries no patch") {
+		t.Fatalf("expected advice about the missing patch, got %v", adv)
 	}
 	d.Findings[0].Fix = "- require signer\n```rust src/lib.rs:41-58\nrequire!(ctx.accounts.authority.is_signer);\n```"
-	if err := d.Validate(); err != nil {
-		t.Fatalf("placed patch: %v", err)
+	if adv := d.Advise(); containsAny(adv, "carries no patch") {
+		t.Fatalf("placed patch still advised: %v", adv)
 	}
 	d.Findings[0].Fix = "- rotate the key"
 	d.Findings[0].FixKind = FixOperational
-	if err := d.Validate(); err != nil {
-		t.Fatalf("operational: %v", err)
+	if adv := d.Advise(); containsAny(adv, "carries no patch", "no fenced code") {
+		t.Fatalf("operational fix still advised: %v", adv)
 	}
 	d.Findings[0].FixKind = "magic"
 	if err := d.Validate(); err == nil || !contains(err.Error(), "fix_kind must be") {
@@ -277,4 +279,15 @@ func TestLocatedFindingNeedsPatchOrOperational(t *testing.T) {
 	if err := d.Validate(); err != nil {
 		t.Fatalf("url-only finding: %v", err)
 	}
+}
+
+func containsAny(lines []string, subs ...string) bool {
+	for _, l := range lines {
+		for _, sub := range subs {
+			if contains(l, sub) {
+				return true
+			}
+		}
+	}
+	return false
 }

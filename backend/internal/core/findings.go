@@ -287,7 +287,7 @@ type Finding struct {
 	ExploitPath         string           `json:"exploit_path,omitempty" doc:"Optional. Shown only to verified owners"`
 	ExploitPathWithheld bool             `json:"exploit_path_withheld,omitempty" doc:"An exploit path exists on this finding but is shown only to verified owners"`
 	Fix                 string           `json:"fix" minLength:"1" doc:"Required. A '- ' bullet per change. A code fence (three backticks on their own line, closed the same way) right after a bullet carries the definite fix: the correct code, the exact header value, the configuration line. A fence whose info line names a place, like rust src/lib.rs:41-45, is shown as a patch replacing those lines (path:line alone inserts before it)"`
-	FixKind             FixKind          `json:"fix_kind,omitempty" enum:"code,operational" doc:"Optional, defaults to code. A code fix on a finding that names a file must carry a placed patch (a fence naming path:start-end); operational says there are no lines to patch: rotate, revoke, configure"`
+	FixKind             FixKind          `json:"fix_kind,omitempty" enum:"code,operational" doc:"Optional. operational says there are no lines to patch (rotate, revoke, configure), so the dry run stops advising a placed fence for a finding that names a file"`
 	References          []string         `json:"references,omitempty" doc:"Optional."`
 	Snippet             *Snippet         `json:"snippet,omitempty" doc:"The enclosing item at the location"`
 	SitesKind           SitesKind        `json:"sites_kind,omitempty" enum:"flow,occurrences" doc:"Recommended with sites. How the sites relate; required when sites are present"`
@@ -455,13 +455,8 @@ func (d *FindingsDocument) Validate() error {
 		if err := fixShape(f.Fix); err != nil {
 			return fmt.Errorf("finding %d fix: %w", f.Ordinal, err)
 		}
-		// A finding that names lines closes with a patch against them, or
-		// says in so many words that the fix is operational.
 		if f.FixKind != "" && f.FixKind != FixCode && f.FixKind != FixOperational {
 			errs = append(errs, fmt.Sprintf("findings[%d].fix_kind must be code or operational", i))
-		}
-		if f.Location.File != "" && f.FixKind != FixOperational && f.Fix != "" && len(FixLocations(f.Fix)) == 0 {
-			errs = append(errs, fmt.Sprintf("findings[%d] names %s but its fix carries no patch: add a ``` fence with path:start-end for the definite code, or set fix_kind operational when there are no lines to change", i, f.Location.File))
 		}
 		if err := proseShape(f.Impact); err != nil {
 			return fmt.Errorf("finding %d impact: %w", f.Ordinal, err)
@@ -813,7 +808,7 @@ func DescribeShape(pin Pin) Shape {
 		Optional:    []string{"exploit_path (owners only)", "references", "status", "carried_from_id", "report.pin.excluded", "report.known", "report.methods"},
 		Rules: []string{
 			"prose: paragraphs under 600 characters, blank lines between them, '- ' bullets, backticks for identifiers, ``` fences for code (under 2000 characters)",
-			"fix: every line a '- ' bullet; a fence right after a bullet is its definite code; a fence place is path:line or path:start-end; a finding that names a file needs at least one placed fence unless fix_kind is operational",
+			"fix: every line a '- ' bullet; a fence right after a bullet is its definite code; a fence place is path:line or path:start-end",
 			"sites: sites_kind is flow or occurrences; each site has file and line_start; at most one attachment per site",
 			"visuals: ids come from the upload endpoint for this audit; mime, name and size are rebound from the stored bytes; one recording per finding",
 			"report.pin must match the audited repo and commit; the summary is recomputed",
@@ -901,7 +896,9 @@ func (d *FindingsDocument) Advise() []string {
 			say(f, "no evidence; say how it was established (static, fuzz, onchain, bytecode, live)")
 		}
 		if f.FixKind == FixOperational {
-			say(f, "fix is operational; if any line changes as part of it, add a placed fence and drop fix_kind")
+			// Declared operational: nothing to patch, nothing to advise.
+		} else if f.Location.File != "" && len(FixLocations(f.Fix)) == 0 {
+			say(f, "names "+f.Location.File+" but the fix carries no patch; add a ``` fence with path:start-end for the definite code, or fix_kind operational when there are no lines to change")
 		} else if !strings.Contains(f.Fix, "```") {
 			say(f, "fix has no fenced code; add the definite code with its place (```rust path:start-end) when one exists")
 		} else if len(FixLocations(f.Fix)) == 0 {

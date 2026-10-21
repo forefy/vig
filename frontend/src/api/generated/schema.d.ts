@@ -2314,7 +2314,7 @@ export interface components {
             /** @description Required. A '- ' bullet per change. A code fence (three backticks on their own line, closed the same way) right after a bullet carries the definite fix: the correct code, the exact header value, the configuration line. A fence whose info line names a place, like rust src/lib.rs:41-45, is shown as a patch replacing those lines (path:line alone inserts before it) */
             fix: string;
             /**
-             * @description Optional, defaults to code. A code fix on a finding that names a file must carry a placed patch (a fence naming path:start-end); operational says there are no lines to patch: rotate, revoke, configure
+             * @description Optional. operational says there are no lines to patch (rotate, revoke, configure), so the dry run stops advising a placed fence for a finding that names a file
              * @enum {string}
              */
             fix_kind?: "code" | "operational";
