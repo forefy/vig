@@ -4,10 +4,11 @@ import { Helmet } from 'react-helmet-async'
 import { $api } from '@/api/hooks'
 import { api } from '@/api/client'
 import { Page, PageHeader } from '@/app/Shell'
-import { StateBadge, auditState, stageWord, Empty, Copy, Stat } from '@/components/primitives'
+import { StateBadge, auditState, stageWord, Empty, Copy, Stat, severityState } from '@/components/primitives'
 import { ProblemBadge, SkeletonRows } from '@/components/ui/states'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Checkbox } from '@/components/ui/checkbox'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { countdown, relTime, short, fmtDate, cn } from '@/lib/utils'
 import { useNow } from '@/lib/useNow'
@@ -25,6 +26,7 @@ const tabs = [
   { to: '/admin/claims', label: 'Claims' },
   { to: '/admin/users', label: 'Users' },
   { to: '/admin/actions', label: 'Actions' },
+  { to: '/admin/lessons', label: 'Lessons' },
 ]
 
 // Board archetype for operators. Every action here becomes a visible event.
@@ -118,6 +120,26 @@ export function AdminAudits() {
   )
   const now = useNow(60_000)
   const items = q.data?.items ?? []
+  // Rows ticked for a bulk delete. One click deletes them all; the toast
+  // counts what went and names what did not.
+  const [picked, setPicked] = useState<Set<string>>(() => new Set())
+  const { busy, run } = useBusy()
+  const visible = items.filter((a) => picked.has(a.id)).length
+  const toggle = (id: string) => setPicked((p) => { const n = new Set(p); if (n.has(id)) n.delete(id); else n.add(id); return n })
+  const deletePicked = () =>
+    run(async () => {
+      const ids = items.filter((a) => picked.has(a.id)).map((a) => a.id)
+      const r = await api.POST('/v1/admin/audits/delete', { body: { ids } })
+      if (r.error || !r.data) toast.error(problemDetail(r.error, 'Failed'))
+      else {
+        const n = (r.data.deleted ?? []).length
+        const failed = r.data.failed ?? []
+        if (failed.length) toast.error(`${n} deleted · ${failed.length} not: ${failed.map((f) => short(f.id, 4, 4)).join(' ')}`)
+        else toast.success(`${n} deleted`)
+        setPicked(new Set())
+        void q.refetch()
+      }
+    })
   const chip = (on: boolean, tone?: 'bad' | 'warn') => cn('rounded-sm border px-2 py-0.5 font-mono text-[11px]', on ? (tone === 'bad' ? 'border-bad text-bad' : tone === 'warn' ? 'border-warn text-warn' : 'border-primary text-foreground') : 'border-border text-muted-foreground hover:text-foreground')
   return (
     <div className="flex flex-col gap-3">
@@ -135,10 +157,18 @@ export function AdminAudits() {
         <Input value={qText} onChange={(e) => set('q', e.target.value)} placeholder="repo" aria-label="Repository" className="ml-auto h-7 w-40 font-mono text-xs" />
         {userId && <button type="button" onClick={() => set('user_id', null)} className={chip(true)}>user {short(userId, 4, 4)} ×</button>}
       </div>
+      {visible > 0 && (
+        <div className="flex items-center gap-3 rounded-md border border-bad/30 bg-bad-soft/30 px-3 py-1.5 text-sm">
+          <span className="num">{visible}</span>
+          <button type="button" onClick={() => setPicked(new Set())} className="font-mono text-xs text-muted-foreground hover:text-foreground">clear</button>
+          <Button size="sm" variant="destructive" className="ml-auto" disabled={busy} onClick={deletePicked}>Delete {visible}</Button>
+        </div>
+      )}
       <Fetched q={q} items={items} empty="No audits">
         <div className="divide-y divide-border rounded-md border border-border bg-card">
           {items.map((a) => (
-            <div key={a.id} className={cn('grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-4 gap-y-1 px-4 py-3 text-sm sm:grid-cols-[minmax(0,1fr)_140px_auto_auto_auto_auto]', a.hidden_at && 'opacity-60')}>
+            <div key={a.id} className={cn('grid grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-x-4 gap-y-1 px-4 py-3 text-sm sm:grid-cols-[auto_minmax(0,1fr)_140px_auto_auto_auto_auto]', a.hidden_at && 'opacity-60', picked.has(a.id) && 'bg-bad-soft/20')}>
+              <Checkbox checked={picked.has(a.id)} onCheckedChange={() => toggle(a.id)} aria-label={`Select ${a.repo}`} />
               <Link to={`/admin/audits/${a.id}`} className="flex min-w-0 flex-col gap-0.5 hover:underline">
                 <span className="truncate font-mono">{a.repo} <span className="text-xs text-muted-foreground">{short(a.head_sha, 7, 0)}</span></span>
                 <span className="truncate font-mono text-xs text-muted-foreground">{chainWords(a.adapter).programs} {(a.program_ids ?? []).map((p) => short(p, 4, 4)).join(' ') || '·'}</span>
@@ -337,6 +367,38 @@ export function AdminActions() {
             <span className="num text-xs text-faint">{relTime(a.created_at, now)}</span>
           </div>
         ))}
+      </div>
+    </Fetched>
+  )
+}
+
+// What people corrected on delivered findings, across every repository:
+// archived as not relevant, rated up or down, each with its reason. The
+// operator reads these before the next audit of the same code; an agent
+// gets them on the job. Filter narrows by repository or title.
+export function AdminLessons() {
+  const q = $api.useQuery('get', '/v1/admin/lessons', { params: { query: { limit: 300 } } })
+  const now = useNow(60_000)
+  const [filter, setFilter] = useState('')
+  const items = (q.data?.items ?? []).filter((l) => !filter || `${l.repo} ${l.title} ${l.reason}`.toLowerCase().includes(filter.toLowerCase()))
+  return (
+    <Fetched q={q} items={q.data?.items ?? []} empty="No corrections yet">
+      <div className="flex flex-col gap-3">
+        <Input value={filter} onChange={(e) => setFilter(e.target.value)} placeholder="owner/name" aria-label="Filter lessons" className="h-9 max-w-xs font-mono text-xs" />
+        <div className="divide-y divide-border rounded-md border border-border bg-card">
+          {items.map((l, i) => (
+            <div key={`${l.finding_id}-${i}`} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5 text-sm">
+              <Link to={`/admin/audits/${l.audit_id}`} className="font-mono text-xs text-muted-foreground hover:text-foreground">{l.repo}</Link>
+              <span className="num text-xs text-muted-foreground">{String(l.ordinal).padStart(2, '0')}</span>
+              <StateBadge state={severityState[l.severity]} className="h-5 px-1.5 text-[10.5px]">{l.severity}</StateBadge>
+              <span className="truncate">{l.title}</span>
+              <StateBadge state="neutral" className="h-5 px-1.5 text-[10.5px]">{l.kind}</StateBadge>
+              <span className="font-mono text-xs text-muted-foreground">{l.from} → {l.to}</span>
+              {l.reason && <span className="text-foreground/80">{l.reason}</span>}
+              <span className="ml-auto num text-xs text-faint">{l.by} · {relTime(l.at, now)}</span>
+            </div>
+          ))}
+        </div>
       </div>
     </Fetched>
   )

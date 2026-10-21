@@ -494,8 +494,8 @@ func TestAdminCancelHideAndRevise(t *testing.T) {
 		Report: core.ReportHeader{AuditID: a.ID, Pin: core.Pin{Repo: f.target.Repo, Commit: "aaaa1111", Programs: []core.ProgramPin{{ID: "P1", Slot: 1, BytecodeSHA256: "abc", Match: core.MatchVerified}}, Excluded: []string{"audits/", "tests/"}},
 			Known: []core.Known{{Title: "No order expiry", Severity: core.SeverityLow, Source: "Cyfrin 2026-03", Status: core.KnownAcknowledged, Reference: "audits/cyfrin.pdf"}}},
 		Findings: []core.Finding{
-			{Ordinal: 1, Severity: core.SeverityHigh, Title: "Missing signer", Location: core.Location{File: "src/lib.rs", LineStart: 4}, Description: "d", Fix: "- f", Snippet: &core.Snippet{Code: "x"}},
-			{Ordinal: 2, Severity: core.SeverityLow, Title: "Unused account", Location: core.Location{File: "src/lib.rs", LineStart: 9}, Description: "d", Fix: "- f"},
+			{Ordinal: 1, Severity: core.SeverityHigh, Title: "Missing signer", Location: core.Location{File: "src/lib.rs", LineStart: 4}, Description: "d", Fix: "- f", FixKind: core.FixOperational, Snippet: &core.Snippet{Code: "x"}},
+			{Ordinal: 2, Severity: core.SeverityLow, Title: "Unused account", Location: core.Location{File: "src/lib.rs", LineStart: 9}, Description: "d", Fix: "- f", FixKind: core.FixOperational},
 		},
 	}
 	r1, err := f.s.StoreReport(f.ctx, a.ID, doc)
@@ -508,7 +508,7 @@ func TestAdminCancelHideAndRevise(t *testing.T) {
 	if _, err := f.s.Advance(f.ctx, a.ID, core.StateDelivered, "operator", "", nil); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.s.SetFindingStatus(f.ctx, r1.ID, r1.Findings[0].ID, core.FindingAcknowledged); err != nil {
+	if _, err := f.s.SetFindingStatus(f.ctx, r1.ID, r1.Findings[0].ID, core.FindingAcknowledged, "", "owner", f.user.ID); err != nil {
 		t.Fatal(err)
 	}
 	if err := f.s.Publish(f.ctx, r1.ID, "acme-vault"); err != nil {
@@ -521,8 +521,8 @@ func TestAdminCancelHideAndRevise(t *testing.T) {
 	// one removed, one added; the audit and the slug move to the new version.
 	rev := doc
 	rev.Findings = []core.Finding{
-		{Ordinal: 1, Severity: core.SeverityMedium, Title: "Missing signer", Location: core.Location{File: "src/lib.rs", LineStart: 5}, Description: "d2", Fix: "- f2"},
-		{Ordinal: 2, Severity: core.SeverityInfo, Title: "Closed orders kept", Location: core.Location{File: "src/lib.rs", LineStart: 20}, Description: "d", Fix: "- f"},
+		{Ordinal: 1, Severity: core.SeverityMedium, Title: "Missing signer", Location: core.Location{File: "src/lib.rs", LineStart: 5}, Description: "d2", Fix: "- f2", FixKind: core.FixOperational},
+		{Ordinal: 2, Severity: core.SeverityInfo, Title: "Closed orders kept", Location: core.Location{File: "src/lib.rs", LineStart: 20}, Description: "d", Fix: "- f", FixKind: core.FixOperational},
 	}
 	out, err := f.s.ReviseReport(f.ctx, a.ID, rev, f.user.ID)
 	if err != nil {
@@ -777,7 +777,7 @@ func TestSeverityHistoryFollowsRevisions(t *testing.T) {
 	}
 	doc := core.FindingsDocument{
 		Report:   core.ReportHeader{AuditID: a.ID, Pin: core.Pin{Repo: f.target.Repo, Commit: "cccc3333", Programs: []core.ProgramPin{{ID: "P1", Slot: 1, BytecodeSHA256: "abc", Match: core.MatchVerified}}}},
-		Findings: []core.Finding{{Ordinal: 1, Severity: core.SeverityHigh, Title: "Missing signer", Location: core.Location{File: "src/lib.rs", LineStart: 4}, Description: "d", Fix: "- f"}},
+		Findings: []core.Finding{{Ordinal: 1, Severity: core.SeverityHigh, Title: "Missing signer", Location: core.Location{File: "src/lib.rs", LineStart: 4}, Description: "d", Fix: "- f", FixKind: core.FixOperational}},
 	}
 	r, err := f.s.StoreReport(f.ctx, a.ID, doc)
 	if err != nil {
@@ -817,5 +817,60 @@ func TestSeverityHistoryFollowsRevisions(t *testing.T) {
 	h := rev.Report.Findings[0].SeverityChanges
 	if len(h) != 2 || h[0].Reason != "signer is the program's own PDA" || h[1].To != core.SeverityHigh || h[1].Reason != "revision 2" || h[1].By != "admin" {
 		t.Fatalf("history %+v", h)
+	}
+}
+
+func TestArchiveKeepsReasonAndFeedsLessons(t *testing.T) {
+	f := newFixture(t)
+	f.grant(1)
+	a, _, err := f.s.QueueAudit(f.ctx, f.audit("dddd4444", "P1"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, st := range []core.AuditState{core.StateClaimed, core.StateCloning, core.StateProgramsVerified, core.StateAnalysis, core.StateHumanReview} {
+		if _, err := f.s.Advance(f.ctx, a.ID, st, "operator", "", nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	doc := core.FindingsDocument{
+		Report: core.ReportHeader{AuditID: a.ID, Pin: core.Pin{Repo: f.target.Repo, Commit: "dddd4444", Programs: []core.ProgramPin{{ID: "P1", Slot: 1, BytecodeSHA256: "abc", Match: core.MatchVerified}}}},
+		Findings: []core.Finding{
+			{Ordinal: 1, Severity: core.SeverityHigh, Title: "Missing signer", Location: core.Location{File: "src/lib.rs", LineStart: 4}, Description: "d", Fix: "- f", FixKind: core.FixOperational},
+			{Ordinal: 2, Severity: core.SeverityHigh, Title: "Reentrancy", Location: core.Location{File: "src/lib.rs", LineStart: 9}, Description: "d", Fix: "- f", FixKind: core.FixOperational},
+		},
+	}
+	r, err := f.s.StoreReport(f.ctx, a.ID, doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.s.Advance(f.ctx, a.ID, core.StateDelivered, "operator", "", nil); err != nil {
+		t.Fatal(err)
+	}
+	got, err := f.s.SetFindingStatus(f.ctx, r.ID, r.Findings[1].ID, core.FindingArchived, "the handler is not reachable: no CPI path exists", "owner", f.user.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != core.FindingArchived || len(got.StatusChanges) != 1 || got.StatusChanges[0].Reason == "" || got.StatusChanges[0].From != core.FindingOpen {
+		t.Fatalf("got %+v", got.StatusChanges)
+	}
+	rep, err := f.s.GetReportByAudit(f.ctx, a.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rep.Summary.High != 1 {
+		t.Fatalf("archived finding still counted: %+v", rep.Summary)
+	}
+	if _, err := f.s.SetFindingSeverity(f.ctx, r.ID, r.Findings[0].ID, core.SeverityMedium, "signer is a PDA", "admin", f.user.ID); err != nil {
+		t.Fatal(err)
+	}
+	lessons, err := f.s.ListLessons(f.ctx, f.target.Repo, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(lessons) != 2 || lessons[0].Kind != "severity" || lessons[1].Kind != "status" || lessons[1].To != "archived" || lessons[1].Reason == "" {
+		t.Fatalf("lessons %+v", lessons)
+	}
+	if other, _ := f.s.ListLessons(f.ctx, "someone/else", 10); len(other) != 0 {
+		t.Fatalf("lessons leaked across repositories: %+v", other)
 	}
 }

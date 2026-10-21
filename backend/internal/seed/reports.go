@@ -1,6 +1,7 @@
 package seed
 
 import (
+	"fmt"
 	"github.com/forefy/vig/backend/internal/core"
 )
 
@@ -38,6 +39,20 @@ func applyFixes(fs []core.Finding, m map[string]recommendation) {
 		put(fs[i].Snippet, fs[i].Location.File, fs[i].Location.LineStart)
 		for j := range fs[i].Sites {
 			put(fs[i].Sites[j].Snippet, fs[i].Sites[j].Location.File, fs[i].Sites[j].Location.LineStart)
+		}
+		// The recommendation is the patch: it rides on the fix as a fence
+		// placed at the located lines. A finding with no recommendation
+		// is closed operationally.
+		if len(core.FixLocations(fs[i].Fix)) == 0 {
+			if r, ok := m[key(fs[i].Location.File, fs[i].Location.LineStart)]; ok {
+				end := fs[i].Location.LineEnd
+				if end == 0 {
+					end = fs[i].Location.LineStart
+				}
+				fs[i].Fix += fmt.Sprintf("\n```rust %s:%d-%d\n%s\n```", fs[i].Location.File, fs[i].Location.LineStart, end, r.Code)
+			} else if fs[i].FixKind == "" {
+				fs[i].FixKind = core.FixOperational
+			}
 		}
 	}
 }
@@ -171,7 +186,7 @@ func vaultDiffReport(repo, head, base, program string) core.FindingsDocument {
 func stakepoolReport(repo, commit, program string) core.FindingsDocument {
 	// Every location below was read at the pinned commit. The code each one
 	// shows is captured from that checkout, not written here.
-	return doc(pin(repo, commit, "", core.ProgramPin{ID: program, Slot: 281_770_000, BytecodeSHA256: hash32("stakepool"), Match: core.MatchVerified}), []core.Finding{
+	d := doc(pin(repo, commit, "", core.ProgramPin{ID: program, Slot: 281_770_000, BytecodeSHA256: hash32("stakepool"), Match: core.MatchVerified}), []core.Finding{
 		{Severity: core.SeverityMedium, Title: "Liquid unstake fee rounds to zero on small amounts", ExploitableBy: core.ExploitableAnyone,
 			Evidence:    &core.Evidence{Kind: core.EvidenceStatic},
 			Location:    core.Location{File: "programs/stakepool/src/instructions/liq_pool/liquid_unstake.rs", Package: "stakepool", LineStart: 91, LineEnd: 91, ProgramID: program, Instruction: "liquid_unstake"},
@@ -192,4 +207,7 @@ func stakepoolReport(repo, commit, program string) core.FindingsDocument {
 			Fix:         "- Return them from the checks they were written for, or remove them and document the codes as retired.",
 		},
 	})
+	// No captured recommendations on this report: every fix is operational.
+	applyFixes(d.Findings, map[string]recommendation{})
+	return d
 }

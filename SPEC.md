@@ -300,6 +300,10 @@ The wizard engine renders `StepSpec` (cards, inputs, tree, meter) and calls Vali
 
 The operator CLI posts exactly this. The future agent emits exactly this. The report page renders exactly this. `exploit_path` is stripped for non-owners.
 
+A finding can be archived after delivery: judged not relevant, always with a short reason, by the owner on the report page or by an admin. An archived finding leaves the severity groups and the summary but never the report: it sits in an archived strip at the end with its reason, who and when, and the same control brings it back. Every status move is a row in `status_changes` (from, to, reason, by, at), append-only, carried across revisions like re-ratings. The report ends with a changes log: every re-rating and status move on any of its findings, newest first.
+
+Corrections are lessons. `GET /v1/admin/lessons` lists every archive and re-rating on delivered reports with its reason, one repository or all (moves made while a report is still in review are the operator iterating, not a lesson; a revision's own "revision N" rows are left out), and the admin page has a Lessons tab over it. A claimed job carries `lessons` for its repository, so the operator or agent reads what the last reports got wrong before reading the code; `vig-op claim` and `vig-op status` print them first.
+
 A finding's `severity` can be re-rated after delivery, up or down, by the owner on the report page or by an admin, always with a short reason. Every re-rating is a row in `severity_changes` (from, to, reason, by, at), append-only, shown under the finding's title oldest first; the report's summary follows the current rating. A revision that rates a kept finding differently adds its own row, "revision N", so the trail has no silent step, and the history follows the finding into each new version.
 
 A writer learns the shape from the API, not from this file: `GET /v1/findings/shape` lists the required, recommended and optional fields, the rules validation applies and a filled example; every field's description in the OpenAPI document opens with Required, Recommended or Optional; and `POST …/report/check` is a dry run that returns what would refuse the document and what it leaves out, so an agent can iterate before it posts. `vig-op report --check` does the same from the sandbox.
@@ -312,7 +316,7 @@ A finding's code renders as a reproduction chain the reader steps through, never
 
 `description`, `normal_use`, `expected` and `impact` are plain text with one light structure, written for a reader in a hurry: blank lines separate short paragraphs, lines starting with `- ` are bullets, backticks mark files, functions and errors, and a ``` fence (closed by a line that is only ```) holds a code block or an exact value such as a returned header. The page renders that structure (spaced paragraphs, bullet lists, code spans, code blocks, and any source path set as code). Validation rejects a paragraph over 600 characters or a code block over 2000, so a wall of text cannot be posted. Three or four blocks per finding is the norm.
 
-`fix` is the same text in a stricter shape: every line is a `- ` bullet, one per change, and a fence right after a bullet is the definite fix for that bullet, rendered nested under it: the correct code, the exact header value, the configuration line, whatever closes the finding outright. A fence that names where it applies on its info line, as `rust programs/x/src/lib.rs:41-45`, renders as a patch: the original lines from the pinned commit as `-`, the fence as `+`, line numbers in the gutter, the location linking to those lines in the repository; `path:line` alone inserts before that line. The server captures those lines into `fix_sites` on submission, like snippets. A bullet with no definite code stands alone. Validation rejects a fix with a non-bullet line, no bullet at all, or a fence place that is not `path:line` or `path:start-end`.
+`fix` is the same text in a stricter shape: every line is a `- ` bullet, one per change, and a fence right after a bullet is the definite fix for that bullet, rendered nested under it: the correct code, the exact header value, the configuration line, whatever closes the finding outright. A fence that names where it applies on its info line, as `rust programs/x/src/lib.rs:41-45`, renders as a patch: the original lines from the pinned commit as `-`, the fence as `+`, line numbers in the gutter, the location linking to those lines in the repository; `path:line` alone inserts before that line. The server captures those lines into `fix_sites` on submission, like snippets. A bullet with no definite code stands alone. A finding that names a file must carry at least one placed fence, unless `fix_kind` is `operational` (rotate, revoke, configure: nothing to patch). Validation rejects a fix with a non-bullet line, no bullet at all, a fence place that is not `path:line` or `path:start-end`, or a located finding with neither a patch nor an operational fix.
 
 ---
 
@@ -363,6 +367,7 @@ GET  /v1/audits/{id}                 with events
 GET  /v1/audits/{id}/report
 PATCH /v1/audits/{id}/report/findings/{fid}   status
 POST /v1/audits/{id}/report/publish  DELETE to unpublish
+PATCH /v1/audits/{id}/report/findings/{fid}            status, reason (required for archived) → finding; the move joins its history
 PATCH /v1/audits/{id}/report/findings/{fid}/severity   severity, reason → finding; the change joins its history, the summary follows
 GET  /v1/audits/{id}/report.json
 
@@ -395,12 +400,15 @@ POST /v1/admin/audits/{id}/fail      reason
 POST /v1/admin/audits/{id}/cancel    reason, hide
 POST /v1/admin/audits/{id}/hide      hidden, reason
 POST /v1/admin/audits/{id}/state     state, reason   (any pipeline state, or failed / cancelled)
-DELETE /v1/admin/audits/{id}         reason          → receipt (events, reports, refunded)
+DELETE /v1/admin/audits/{id}         reason optional → receipt (events, reports, refunded)
+POST /v1/admin/audits/delete         ids[], reason optional → {deleted[], failed[]}; one click on the list for any number of ticked rows
 GET  /v1/admin/audits/{id}/report.json
 POST /v1/admin/audits/{id}/visuals   attachment bytes (base64) for a revision → the reference §9 carries
 POST /v1/admin/audits/{id}/report/check  findings document → {valid, errors, advice}; nothing stored
 POST /v1/admin/audits/{id}/report    findings document → new revision
+PATCH /v1/admin/audits/{id}/report/findings/{fid}            status, reason → finding, as admin
 PATCH /v1/admin/audits/{id}/report/findings/{fid}/severity   severity, reason → finding, as admin
+GET  /v1/admin/lessons               repo, limit → every archive and re-rating with its reason, newest first
 GET  /v1/admin/tweet-claims          POST …/{id}/approve | reject | revoke
 POST /v1/admin/credits/grant         user, delta, reason
 POST /v1/admin/credits/revoke

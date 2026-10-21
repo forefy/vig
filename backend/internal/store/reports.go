@@ -172,9 +172,9 @@ func insertFinding(ctx context.Context, tx pgx.Tx, reportID string, f core.Findi
 		fixSites, _ = json.Marshal(f.FixSites)
 	}
 	id := NewID()
-	_, err := tx.Exec(ctx, `insert into findings(id, report_id, ordinal, severity, title, location, description, exploit_path, fix, refs, status, carried_from_finding_id, evidence, snippet, sites_kind, sites, exploitable_by, visuals, impact, expected, normal_use, fix_sites)
-		values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)`,
-		id, reportID, f.Ordinal, string(f.Severity), f.Title, loc, f.Description, nullStr(f.ExploitPath), f.Fix, refs, string(status), carried, evidence, snippet, nullStr(string(f.SitesKind)), sites, nullStr(string(f.ExploitableBy)), visuals, nullStr(f.Impact), nullStr(f.Expected), nullStr(f.NormalUse), fixSites)
+	_, err := tx.Exec(ctx, `insert into findings(id, report_id, ordinal, severity, title, location, description, exploit_path, fix, refs, status, carried_from_finding_id, evidence, snippet, sites_kind, sites, exploitable_by, visuals, impact, expected, normal_use, fix_sites, fix_kind)
+		values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)`,
+		id, reportID, f.Ordinal, string(f.Severity), f.Title, loc, f.Description, nullStr(f.ExploitPath), f.Fix, refs, string(status), carried, evidence, snippet, nullStr(string(f.SitesKind)), sites, nullStr(string(f.ExploitableBy)), visuals, nullStr(f.Impact), nullStr(f.Expected), nullStr(f.NormalUse), fixSites, nullStr(string(f.FixKind)))
 	return id, wrap(err)
 }
 
@@ -279,6 +279,10 @@ func (s *Store) ReviseReport(ctx context.Context, auditID string, doc core.Findi
 					select gen_random_uuid(), $2, from_severity, to_severity, reason, by_role, actor_user_id, created_at from finding_severity_changes where finding_id=$1`, p.ID, newID); err != nil {
 					return wrap(err)
 				}
+				if _, err := tx.Exec(ctx, `insert into finding_status_changes(id, finding_id, from_status, to_status, reason, by_role, actor_user_id, created_at)
+					select gen_random_uuid(), $2, from_status, to_status, reason, by_role, actor_user_id, created_at from finding_status_changes where finding_id=$1`, p.ID, newID); err != nil {
+					return wrap(err)
+				}
 				if p.Severity != f.Severity {
 					if _, err := tx.Exec(ctx, `insert into finding_severity_changes(id, finding_id, from_severity, to_severity, reason, by_role, actor_user_id)
 						values($1,$2,$3,$4,$5,$6,$7)`, NewID(), newID, string(p.Severity), string(f.Severity), fmt.Sprintf("revision %d", prevRevision+1), "admin", nullStr(adminID)); err != nil {
@@ -358,7 +362,7 @@ func (s *Store) listFindings(ctx context.Context, db DB, reportID string) ([]Fin
 }
 
 func (s *Store) listFindingsWhere(ctx context.Context, db DB, where string, args ...any) ([]Finding, error) {
-	rows, err := db.Query(ctx, `select f.id, f.report_id, f.ordinal, f.severity, f.title, f.location, f.description, coalesce(f.exploit_path,''), f.fix, f.refs, f.status, coalesce(f.carried_from_finding_id::text,''), f.evidence, f.snippet, coalesce(f.sites_kind,''), f.sites, coalesce(f.exploitable_by,''), f.visuals, coalesce(f.impact,''), coalesce(f.expected,''), coalesce(f.normal_use,''), f.fix_sites, f.created_at, f.updated_at
+	rows, err := db.Query(ctx, `select f.id, f.report_id, f.ordinal, f.severity, f.title, f.location, f.description, coalesce(f.exploit_path,''), f.fix, f.refs, f.status, coalesce(f.carried_from_finding_id::text,''), f.evidence, f.snippet, coalesce(f.sites_kind,''), f.sites, coalesce(f.exploitable_by,''), f.visuals, coalesce(f.impact,''), coalesce(f.expected,''), coalesce(f.normal_use,''), f.fix_sites, coalesce(f.fix_kind,''), f.created_at, f.updated_at
 		from findings f join reports r on r.id=f.report_id join audits pa on pa.id=r.audit_id join targets pt on pt.id=pa.target_id where `+where+` order by f.ordinal`, args...)
 	if err != nil {
 		return nil, err
@@ -368,8 +372,9 @@ func (s *Store) listFindingsWhere(ctx context.Context, db DB, where string, args
 	for rows.Next() {
 		var f Finding
 		var loc, refs, evidence, snippet, sites, visuals, impact, expected, normalUse, fixSites []byte
+		var fixKind string
 		var sitesKind string
-		if err := rows.Scan(&f.ID, &f.ReportID, &f.Ordinal, &f.Severity, &f.Title, &loc, &f.Description, &f.ExploitPath, &f.Fix, &refs, &f.Status, &f.CarriedFromID, &evidence, &snippet, &sitesKind, &sites, &f.ExploitableBy, &visuals, &impact, &expected, &normalUse, &fixSites, &f.CreatedAt, &f.UpdatedAt); err != nil {
+		if err := rows.Scan(&f.ID, &f.ReportID, &f.Ordinal, &f.Severity, &f.Title, &loc, &f.Description, &f.ExploitPath, &f.Fix, &refs, &f.Status, &f.CarriedFromID, &evidence, &snippet, &sitesKind, &sites, &f.ExploitableBy, &visuals, &impact, &expected, &normalUse, &fixSites, &fixKind, &f.CreatedAt, &f.UpdatedAt); err != nil {
 			return nil, err
 		}
 		_ = json.Unmarshal(loc, &f.Location)
@@ -392,6 +397,7 @@ func (s *Store) listFindingsWhere(ctx context.Context, db DB, where string, args
 		f.Impact = string(impact)
 		f.Expected = string(expected)
 		f.NormalUse = string(normalUse)
+		f.FixKind = core.FixKind(fixKind)
 		if len(fixSites) > 0 {
 			_ = json.Unmarshal(fixSites, &f.FixSites)
 		}
@@ -401,7 +407,99 @@ func (s *Store) listFindingsWhere(ctx context.Context, db DB, where string, args
 		return nil, err
 	}
 	rows.Close()
-	return out, s.attachSeverityChanges(ctx, db, out)
+	if err := s.attachSeverityChanges(ctx, db, out); err != nil {
+		return nil, err
+	}
+	return out, s.attachStatusChanges(ctx, db, out)
+}
+
+// attachStatusChanges loads every status move of the given findings,
+// oldest first, onto the finding it belongs to.
+func (s *Store) attachStatusChanges(ctx context.Context, db DB, fs []Finding) error {
+	if len(fs) == 0 {
+		return nil
+	}
+	ids := make([]string, len(fs))
+	at := map[string]int{}
+	for i, f := range fs {
+		ids[i] = f.ID
+		at[f.ID] = i
+	}
+	rows, err := db.Query(ctx, `select finding_id, from_status, to_status, reason, by_role, created_at
+		from finding_status_changes where finding_id = any($1::uuid[]) order by created_at, id`, ids)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var fid, from, to string
+		var c core.StatusChange
+		if err := rows.Scan(&fid, &from, &to, &c.Reason, &c.By, &c.At); err != nil {
+			return err
+		}
+		c.From, c.To = core.FindingStatus(from), core.FindingStatus(to)
+		if i, ok := at[fid]; ok {
+			fs[i].StatusChanges = append(fs[i].StatusChanges, c)
+		}
+	}
+	return rows.Err()
+}
+
+// Lesson is one correction a person made to a delivered finding: archived
+// as not relevant, or rated up or down, always with the reason. Listed
+// across reports so the next audit of the same code starts from them.
+type Lesson struct {
+	AuditID   string
+	Repo      string
+	FindingID string
+	Ordinal   int
+	Title     string
+	Severity  core.Severity
+	Kind      string // severity or status
+	From      string
+	To        string
+	Reason    string
+	By        string
+	At        time.Time
+}
+
+// ListLessons returns corrections newest first, for one repository when
+// repo is set, otherwise across every audit. Only delivered audits count:
+// moves made while a report is still in review are the operator and the
+// admin iterating, not the owner judging. A revision's own "revision N"
+// rows are bookkeeping, not lessons. Only the current report of each audit
+// is read; earlier versions carried their history forward.
+func (s *Store) ListLessons(ctx context.Context, repo string, limit int) ([]Lesson, error) {
+	if limit <= 0 || limit > 500 {
+		limit = 200
+	}
+	rows, err := s.Pool.Query(ctx, `
+		select audit_id, repo, finding_id, ordinal, title, severity, kind, from_v, to_v, reason, by_role, at from (
+			select r.audit_id, pt.repo_full_name, f.id, f.ordinal, f.title, f.severity, 'severity', c.from_severity, c.to_severity, c.reason, c.by_role, c.created_at, a.state
+			from finding_severity_changes c join findings f on f.id=c.finding_id join reports r on r.id=f.report_id
+			join audits a on a.id=r.audit_id and a.report_id=r.id join targets pt on pt.id=a.target_id
+			union all
+			select r.audit_id, pt.repo_full_name, f.id, f.ordinal, f.title, f.severity, 'status', c.from_status, c.to_status, c.reason, c.by_role, c.created_at, a.state
+			from finding_status_changes c join findings f on f.id=c.finding_id join reports r on r.id=f.report_id
+			join audits a on a.id=r.audit_id and a.report_id=r.id join targets pt on pt.id=a.target_id
+		) l(audit_id, repo, finding_id, ordinal, title, severity, kind, from_v, to_v, reason, by_role, at, state)
+		where ($1 = '' or repo = $1) and state = 'delivered' and reason not like 'revision %'
+		order by at desc limit $2`, repo, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []Lesson{}
+	for rows.Next() {
+		var l Lesson
+		var sev string
+		if err := rows.Scan(&l.AuditID, &l.Repo, &l.FindingID, &l.Ordinal, &l.Title, &sev, &l.Kind, &l.From, &l.To, &l.Reason, &l.By, &l.At); err != nil {
+			return nil, err
+		}
+		l.Severity = core.Severity(sev)
+		out = append(out, l)
+	}
+	return out, rows.Err()
 }
 
 // attachSeverityChanges loads every re-rating of the given findings, oldest
@@ -485,17 +583,42 @@ func (s *Store) SetFindingSeverity(ctx context.Context, reportID, findingID stri
 	return Finding{}, ErrNotFound
 }
 
-// SetFindingStatus updates one finding's status.
-func (s *Store) SetFindingStatus(ctx context.Context, reportID, findingID string, status core.FindingStatus) (Finding, error) {
+// SetFindingStatus moves one finding's status, keeps the move with its
+// reason, and recomputes the report's summary (archived findings are not
+// counted). Setting the status it already has records nothing.
+func (s *Store) SetFindingStatus(ctx context.Context, reportID, findingID string, status core.FindingStatus, reason, role, actorUserID string) (Finding, error) {
 	if !ValidID(findingID) {
 		return Finding{}, ErrNotFound
 	}
-	tag, err := s.Pool.Exec(ctx, `update findings set status=$3, updated_at=now() where id=$1 and report_id=$2`, findingID, reportID, string(status))
+	err := s.Tx(ctx, func(tx pgx.Tx) error {
+		var from string
+		if err := tx.QueryRow(ctx, `select status from findings where id=$1 and report_id=$2 for update`, findingID, reportID).Scan(&from); err != nil {
+			return wrap(err)
+		}
+		if core.FindingStatus(from) == status {
+			return nil
+		}
+		if _, err := tx.Exec(ctx, `insert into finding_status_changes(id, finding_id, from_status, to_status, reason, by_role, actor_user_id)
+			values($1,$2,$3,$4,$5,$6,$7)`, NewID(), findingID, from, string(status), reason, role, nullStr(actorUserID)); err != nil {
+			return wrap(err)
+		}
+		if _, err := tx.Exec(ctx, `update findings set status=$3, updated_at=now() where id=$1 and report_id=$2`, findingID, reportID, string(status)); err != nil {
+			return wrap(err)
+		}
+		fs, err := s.listFindings(ctx, tx, reportID)
+		if err != nil {
+			return err
+		}
+		docs := make([]core.Finding, len(fs))
+		for i, f := range fs {
+			docs[i] = f.Finding
+		}
+		summary, _ := json.Marshal(core.Summarize(docs))
+		_, err = tx.Exec(ctx, `update reports set summary=$2 where id=$1`, reportID, summary)
+		return wrap(err)
+	})
 	if err != nil {
 		return Finding{}, err
-	}
-	if tag.RowsAffected() == 0 {
-		return Finding{}, ErrNotFound
 	}
 	fs, err := s.listFindings(ctx, s.Pool, reportID)
 	if err != nil {

@@ -381,10 +381,10 @@ func (sd *Seeder) Run(ctx context.Context) (Result, error) {
 		return res, err
 	}
 	// The owner fixed the critical one before re-auditing.
-	if _, err := s.SetFindingStatus(ctx, r1.ID, r1.Findings[0].ID, core.FindingFixed); err != nil {
+	if _, err := s.SetFindingStatus(ctx, r1.ID, r1.Findings[0].ID, core.FindingFixed, "", "owner", ""); err != nil {
 		return res, err
 	}
-	if _, err := s.SetFindingStatus(ctx, r1.ID, r1.Findings[2].ID, core.FindingAcknowledged); err != nil {
+	if _, err := s.SetFindingStatus(ctx, r1.ID, r1.Findings[2].ID, core.FindingAcknowledged, "", "owner", ""); err != nil {
 		return res, err
 	}
 	if err := s.Publish(ctx, r1.ID, PublishedSlug); err != nil {

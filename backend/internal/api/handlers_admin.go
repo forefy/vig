@@ -91,8 +91,25 @@ type adminStateIn struct {
 type adminDeleteIn struct {
 	ID   string `path:"id"`
 	Body struct {
-		Reason string `json:"reason" minLength:"1"`
+		Reason string `json:"reason,omitempty" maxLength:"140" doc:"Optional; kept on the action log"`
 	}
+}
+
+type adminDeleteManyIn struct {
+	Body struct {
+		IDs    []string `json:"ids" minItems:"1" maxItems:"200" doc:"Audit ids to delete"`
+		Reason string   `json:"reason,omitempty" maxLength:"140"`
+	}
+}
+
+// DeletedMany is the receipt of a bulk delete: one receipt per audit that
+// went, one line per id that did not.
+type DeletedMany struct {
+	Deleted []DeletedAudit `json:"deleted"`
+	Failed  []struct {
+		ID    string `json:"id"`
+		Error string `json:"error"`
+	} `json:"failed"`
 }
 
 // DeletedAudit is what remains of a deleted audit: the action log row and
@@ -142,9 +159,12 @@ func (d *Deps) registerAdmin(api huma.API) {
 	huma.Register(api, withAuth(op("adminCancel", http.MethodPost, "/v1/admin/audits/{id}/cancel", "Cancel an audit from any state, delivered included; the credit or slot comes back, a public report goes private, and hide takes it off the owner's list", "admin"), adminAuth), d.adminCancel)
 	huma.Register(api, withAuth(op("adminHide", http.MethodPost, "/v1/admin/audits/{id}/hide", "Take an audit off its owner's list, or put it back", "admin"), adminAuth), d.adminHide)
 	huma.Register(api, withAuth(op("adminSetState", http.MethodPost, "/v1/admin/audits/{id}/state", "Put an audit in a state: any pipeline state from any state (a refunded audit is paid for again, a delivered one goes private), or failed and cancelled by their own rules", "admin"), adminAuth), d.adminSetState)
+	huma.Register(api, withAuth(op("adminDeleteAudits", http.MethodPost, "/v1/admin/audits/delete", "Delete several audits at once; each goes the way a single delete does, and the receipt says which did not", "admin"), adminAuth), d.adminDeleteAudits)
 	huma.Register(api, withAuth(op("adminDeleteAudit", http.MethodDelete, "/v1/admin/audits/{id}", "Delete the audit row and everything under it; a cost still held comes back and the ledger keeps its rows", "admin"), adminAuth), d.adminDeleteAudit)
 	huma.Register(api, withAuth(op("adminGetReportJSON", http.MethodGet, "/v1/admin/audits/{id}/report.json", "The current report as the findings document, to edit and post back as a revision", "admin"), adminAuth), d.adminReportJSON)
 	huma.Register(api, withAuth(op("adminReviseReport", http.MethodPost, "/v1/admin/audits/{id}/report", "Store a new version of a delivered report; the owner sees the change on the timeline", "admin"), adminAuth), d.adminReviseReport)
+	huma.Register(api, withAuth(op("adminSetFindingStatus", http.MethodPatch, "/v1/admin/audits/{id}/report/findings/{fid}", "Move a finding's status as admin; archiving needs a reason and the move joins its history", "admin"), adminAuth), d.adminSetFindingStatus)
+	huma.Register(api, withAuth(op("adminListLessons", http.MethodGet, "/v1/admin/lessons", "What owners and admins corrected on delivered findings: archived as not relevant, rated up or down, with the reasons; newest first, one repository or all", "admin"), adminAuth), d.adminListLessons)
 	huma.Register(api, withAuth(op("adminSetFindingSeverity", http.MethodPatch, "/v1/admin/audits/{id}/report/findings/{fid}/severity", "Re-rate a finding up or down with a reason, as admin; the change joins its history", "admin"), adminAuth), d.adminSetFindingSeverity)
 	huma.Register(api, withAuth(op("adminReassign", http.MethodPost, "/v1/admin/audits/{id}/reassign", "Release a claimed job back to the queue", "admin"), adminAuth), d.adminReassign)
 	huma.Register(api, withAuth(op("adminDelay", http.MethodPost, "/v1/admin/audits/{id}/delay", "Delay an audit with a new ETA", "admin"), adminAuth), d.adminDelay)
@@ -320,17 +340,61 @@ func (d *Deps) adminSetState(ctx context.Context, in *adminStateIn) (*body[Audit
 // adminDeleteAudit is the one row delete in the product. The action log
 // keeps what the row said, so the deletion itself stays on record.
 func (d *Deps) adminDeleteAudit(ctx context.Context, in *adminDeleteIn) (*body[DeletedAudit], error) {
-	del, err := d.Store.DeleteAudit(ctx, in.ID, principal(ctx).UserID)
+	out, err := d.deleteAudit(ctx, in.ID, in.Body.Reason)
 	if err != nil {
-		return nil, fail(err)
+		return nil, err
+	}
+	return &body[DeletedAudit]{Body: out}, nil
+}
+
+// deleteAudit is the one deletion path: the row and everything under it
+// go, a held cost comes back, the checkout is dropped, the action log
+// keeps the receipt. A reason is welcome, never required.
+func (d *Deps) deleteAudit(ctx context.Context, id, reason string) (DeletedAudit, error) {
+	del, err := d.Store.DeleteAudit(ctx, id, principal(ctx).UserID)
+	if err != nil {
+		return DeletedAudit{}, fail(err)
 	}
 	a := del.Audit
 	d.dropClone(ctx, a)
-	if _, err := d.logAdmin(ctx, "audit.delete", "audit", a.ID, map[string]any{"reason": in.Body.Reason, "repo": a.Repo, "user_id": a.UserID, "state": string(a.State),
+	if _, err := d.logAdmin(ctx, "audit.delete", "audit", a.ID, map[string]any{"reason": reason, "repo": a.Repo, "user_id": a.UserID, "state": string(a.State),
 		"cost_kind": a.CostKind, "head_sha": a.HeadSHA, "events": del.Events, "reports": del.Reports, "refunded": del.Refunded, "created_at": a.CreatedAt.UTC().Format(time.RFC3339)}); err != nil {
-		return nil, fail(err)
+		return DeletedAudit{}, fail(err)
 	}
-	return &body[DeletedAudit]{Body: DeletedAudit{ID: a.ID, Repo: a.Repo, UserID: a.UserID, State: a.State, Events: del.Events, Reports: del.Reports, Refunded: del.Refunded}}, nil
+	return DeletedAudit{ID: a.ID, Repo: a.Repo, UserID: a.UserID, State: a.State, Events: del.Events, Reports: del.Reports, Refunded: del.Refunded}, nil
+}
+
+// adminDeleteAudits deletes each id in turn; one that fails does not stop
+// the rest, and the receipt names it.
+func (d *Deps) adminDeleteAudits(ctx context.Context, in *adminDeleteManyIn) (*body[DeletedMany], error) {
+	out := DeletedMany{Deleted: []DeletedAudit{}}
+	seen := map[string]bool{}
+	for _, id := range in.Body.IDs {
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
+		del, err := d.deleteAudit(ctx, id, in.Body.Reason)
+		if err != nil {
+			msg := err.Error()
+			if se, ok := err.(huma.StatusError); ok {
+				msg = se.Error()
+			}
+			out.Failed = append(out.Failed, struct {
+				ID    string `json:"id"`
+				Error string `json:"error"`
+			}{ID: id, Error: msg})
+			continue
+		}
+		out.Deleted = append(out.Deleted, del)
+	}
+	if out.Failed == nil {
+		out.Failed = []struct {
+			ID    string `json:"id"`
+			Error string `json:"error"`
+		}{}
+	}
+	return &body[DeletedMany]{Body: out}, nil
 }
 
 func (d *Deps) adminHide(ctx context.Context, in *adminHideIn) (*body[Audit], error) {
@@ -407,6 +471,49 @@ func (d *Deps) adminReviseReport(ctx context.Context, in *adminReviseIn) (*body[
 	}
 	d.notify(ctx, a.UserID, "report_revised", map[string]any{"audit_id": a.ID, "revision": rev.Report.Revision, "added": rev.Added, "removed": rev.Removed})
 	return &body[ReportRevision]{Body: ReportRevision{Report: toReport(rev.Report, true), Added: rev.Added, Removed: rev.Removed, Kept: rev.Kept}}, nil
+}
+
+type lessonsIn struct {
+	Repo  string `query:"repo" doc:"owner/name; empty for every repository"`
+	Limit int    `query:"limit" minimum:"1" maximum:"500" default:"200"`
+}
+
+func (d *Deps) adminListLessons(ctx context.Context, in *lessonsIn) (*body[list[Lesson]], error) {
+	rows, err := d.Store.ListLessons(ctx, strings.TrimSpace(in.Repo), in.Limit)
+	if err != nil {
+		return nil, fail(err)
+	}
+	out := make([]Lesson, 0, len(rows))
+	for _, l := range rows {
+		out = append(out, toLesson(l))
+	}
+	return &body[list[Lesson]]{Body: list[Lesson]{Items: out}}, nil
+}
+
+func (d *Deps) adminSetFindingStatus(ctx context.Context, in *findingStatusIn) (*body[core.Finding], error) {
+	a, err := d.Store.GetAudit(ctx, in.ID)
+	if err != nil {
+		return nil, fail(err)
+	}
+	r, err := d.Store.GetReportByAudit(ctx, a.ID)
+	if err != nil {
+		return nil, fail(err)
+	}
+	reason := strings.TrimSpace(in.Body.Reason)
+	if in.Body.Status == core.FindingArchived && len(reason) < 3 {
+		return nil, huma.Error422UnprocessableEntity("archiving a finding needs a reason")
+	}
+	f, err := d.Store.SetFindingStatus(ctx, r.ID, in.FID, in.Body.Status, reason, "admin", principal(ctx).UserID)
+	if err != nil {
+		return nil, fail(err)
+	}
+	if _, err := d.logAdmin(ctx, "finding.status", "finding", f.ID, map[string]any{"audit_id": a.ID, "to": in.Body.Status, "reason": reason}); err != nil {
+		return nil, fail(err)
+	}
+	out := f.Finding
+	out.ID = f.ID
+	out.CarriedFromID = f.CarriedFromID
+	return &body[core.Finding]{Body: out}, nil
 }
 
 func (d *Deps) adminSetFindingSeverity(ctx context.Context, in *findingSeverityIn) (*body[core.Finding], error) {

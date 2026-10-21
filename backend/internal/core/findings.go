@@ -33,6 +33,7 @@ const (
 	FindingFixed        FindingStatus = "fixed"
 	FindingAcknowledged FindingStatus = "acknowledged"
 	FindingDisputed     FindingStatus = "disputed"
+	FindingArchived     FindingStatus = "archived" // judged not relevant, with a reason; kept visible, never counted
 )
 
 // ExploitableBy says who has to be to reach a finding: the privilege an
@@ -123,6 +124,27 @@ type Snippet struct {
 	Code      string `json:"code" doc:"Lines around the location, newline separated"`
 	Fix       string `json:"fix,omitempty" doc:"The recommended code at this location, shown against the located lines"`
 	FixAt     int    `json:"fix_at,omitempty" minimum:"1" doc:"Line the recommendation is shown before. Defaults to just after the located lines, which is wrong when the fix is a guard that has to precede them"`
+}
+
+// FixKind says what closes a finding. A code fix is a change to the
+// located lines and must carry a placed patch; an operational fix (rotate
+// a secret, revoke a token, change a setting) has no lines to patch.
+type FixKind string
+
+const (
+	FixCode        FixKind = "code"
+	FixOperational FixKind = "operational"
+)
+
+// StatusChange is one move of a finding's status, kept forever. Archiving
+// always carries a reason: a finding judged not relevant is a lesson for
+// the next report on the same code, not a deletion.
+type StatusChange struct {
+	From   FindingStatus `json:"from" enum:"open,fixed,acknowledged,disputed,archived"`
+	To     FindingStatus `json:"to" enum:"open,fixed,acknowledged,disputed,archived"`
+	Reason string        `json:"reason,omitempty" maxLength:"140" doc:"Why; required when archiving"`
+	By     string        `json:"by" enum:"owner,admin,operator"`
+	At     time.Time     `json:"at"`
 }
 
 // SeverityChange is one re-rating of a finding, kept forever: the owner
@@ -265,15 +287,17 @@ type Finding struct {
 	ExploitPath         string           `json:"exploit_path,omitempty" doc:"Optional. Shown only to verified owners"`
 	ExploitPathWithheld bool             `json:"exploit_path_withheld,omitempty" doc:"An exploit path exists on this finding but is shown only to verified owners"`
 	Fix                 string           `json:"fix" minLength:"1" doc:"Required. A '- ' bullet per change. A code fence (three backticks on their own line, closed the same way) right after a bullet carries the definite fix: the correct code, the exact header value, the configuration line. A fence whose info line names a place, like rust src/lib.rs:41-45, is shown as a patch replacing those lines (path:line alone inserts before it)"`
+	FixKind             FixKind          `json:"fix_kind,omitempty" enum:"code,operational" doc:"Optional, defaults to code. A code fix on a finding that names a file must carry a placed patch (a fence naming path:start-end); operational says there are no lines to patch: rotate, revoke, configure"`
 	References          []string         `json:"references,omitempty" doc:"Optional."`
 	Snippet             *Snippet         `json:"snippet,omitempty" doc:"The enclosing item at the location"`
 	SitesKind           SitesKind        `json:"sites_kind,omitempty" enum:"flow,occurrences" doc:"Recommended with sites. How the sites relate; required when sites are present"`
 	Sites               []Site           `json:"sites,omitempty" doc:"Recommended for critical and high. Further places this finding points at, in order"`
-	Status              FindingStatus    `json:"status" enum:"open,fixed,acknowledged,disputed" doc:"Optional, defaults to open."`
+	Status              FindingStatus    `json:"status" enum:"open,fixed,acknowledged,disputed,archived" doc:"Optional, defaults to open. Set by the owner afterwards; archived means judged not relevant, with a reason on status_changes, and is not counted"`
 	CarriedFromID       string           `json:"carried_from_id,omitempty" doc:"Optional. Finding id in the previous report this continues"`
 	Evidence            *Evidence        `json:"evidence,omitempty" doc:"Recommended. What established the finding beyond reading the code"`
 	Visuals             []Visual         `json:"visuals,omitempty" doc:"Optional. Attachments for the finding as a whole, shown on the impact item: the script that ran it, a recording, a dump. Served from the stored bytes by id. A finding carries one recording in all, here or on a step"`
 	Impact              string           `json:"impact,omitempty" doc:"Recommended. What the finding costs when it happens: who loses what, in plain terms. Same shape as description; the last item of the reproduction chain, carrying the finding-level attachments"`
+	StatusChanges       []StatusChange   `json:"status_changes,omitempty" doc:"Server-kept history of status moves, oldest first, archiving with its reason. Ignored when posted"`
 	SeverityChanges     []SeverityChange `json:"severity_changes,omitempty" doc:"Server-kept history of re-ratings, oldest first; severity is the current rating. Ignored when posted"`
 	FixSites            []FixSite        `json:"fix_sites,omitempty" doc:"Server-captured code for every fix fence that names a location; the page renders such a fence as a patch against these lines"`
 	NormalUse           string           `json:"normal_use,omitempty" doc:"Recommended. How this code is ordinarily used: who calls it, with what, and what comes back. Same shape as description; the first item of the reproduction chain"`
@@ -357,6 +381,9 @@ type FindingsDocument struct {
 func Summarize(findings []Finding) Summary {
 	var s Summary
 	for _, f := range findings {
+		if f.Status == FindingArchived {
+			continue
+		}
 		switch f.Severity {
 		case SeverityCritical:
 			s.Critical++
@@ -427,6 +454,14 @@ func (d *FindingsDocument) Validate() error {
 		}
 		if err := fixShape(f.Fix); err != nil {
 			return fmt.Errorf("finding %d fix: %w", f.Ordinal, err)
+		}
+		// A finding that names lines closes with a patch against them, or
+		// says in so many words that the fix is operational.
+		if f.FixKind != "" && f.FixKind != FixCode && f.FixKind != FixOperational {
+			errs = append(errs, fmt.Sprintf("findings[%d].fix_kind must be code or operational", i))
+		}
+		if f.Location.File != "" && f.FixKind != FixOperational && f.Fix != "" && len(FixLocations(f.Fix)) == 0 {
+			errs = append(errs, fmt.Sprintf("findings[%d] names %s but its fix carries no patch: add a ``` fence with path:start-end for the definite code, or set fix_kind operational when there are no lines to change", i, f.Location.File))
 		}
 		if err := proseShape(f.Impact); err != nil {
 			return fmt.Errorf("finding %d impact: %w", f.Ordinal, err)
@@ -570,7 +605,7 @@ func validSeverity(s Severity) bool {
 
 func validFindingStatus(s FindingStatus) bool {
 	switch s {
-	case FindingOpen, FindingFixed, FindingAcknowledged, FindingDisputed:
+	case FindingOpen, FindingFixed, FindingAcknowledged, FindingDisputed, FindingArchived:
 		return true
 	}
 	return false
@@ -778,7 +813,7 @@ func DescribeShape(pin Pin) Shape {
 		Optional:    []string{"exploit_path (owners only)", "references", "status", "carried_from_id", "report.pin.excluded", "report.known", "report.methods"},
 		Rules: []string{
 			"prose: paragraphs under 600 characters, blank lines between them, '- ' bullets, backticks for identifiers, ``` fences for code (under 2000 characters)",
-			"fix: every line a '- ' bullet; a fence right after a bullet is its definite code; a fence place is path:line or path:start-end",
+			"fix: every line a '- ' bullet; a fence right after a bullet is its definite code; a fence place is path:line or path:start-end; a finding that names a file needs at least one placed fence unless fix_kind is operational",
 			"sites: sites_kind is flow or occurrences; each site has file and line_start; at most one attachment per site",
 			"visuals: ids come from the upload endpoint for this audit; mime, name and size are rebound from the stored bytes; one recording per finding",
 			"report.pin must match the audited repo and commit; the summary is recomputed",
@@ -865,7 +900,9 @@ func (d *FindingsDocument) Advise() []string {
 		if f.Evidence == nil {
 			say(f, "no evidence; say how it was established (static, fuzz, onchain, bytecode, live)")
 		}
-		if !strings.Contains(f.Fix, "```") {
+		if f.FixKind == FixOperational {
+			say(f, "fix is operational; if any line changes as part of it, add a placed fence and drop fix_kind")
+		} else if !strings.Contains(f.Fix, "```") {
 			say(f, "fix has no fenced code; add the definite code with its place (```rust path:start-end) when one exists")
 		} else if len(FixLocations(f.Fix)) == 0 {
 			say(f, "fix fences name no place; put path:start-end on the fence line so it renders as a patch against those lines")

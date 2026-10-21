@@ -40,7 +40,7 @@ Phase 1 is concierge: a person runs the tooling, the product does not know the d
 
    The report shows a finding's code as a chain the reader steps through: `normal_use` first (how the code is ordinarily called, by whom, with what), `expected` next (what it is supposed to guarantee there), then the code steps, then `impact` last (who loses what). Write all three in the same shape as `description`; a finding without them just has a shorter chain.
 
-   `fix` is bullets only, one per change. When there is a definite fix, put it in a ``` fence right after its bullet and the report nests it under that bullet: the correct code, the exact header value, the configuration line. Name where the code goes on the fence line, `rust programs/x/src/lib.rs:41-45`, and the report shows it as a patch: those lines as removed, yours as added, linked to the repository at the pinned commit (`path:line` alone inserts before that line). A bullet with no definite code stands alone. The other prose fields take a fence too, for an exact value such as a returned header.
+   `fix` is bullets only, one per change. When there is a definite fix, put it in a ``` fence right after its bullet and the report nests it under that bullet: the correct code, the exact header value, the configuration line. Name where the code goes on the fence line, `rust programs/x/src/lib.rs:41-45`, and the report shows it as a patch: those lines as removed, yours as added, linked to the repository at the pinned commit (`path:line` alone inserts before that line). A bullet with no definite code stands alone, but a finding that names a file must carry at least one placed fence, or say `"fix_kind": "operational"` when there are no lines to change (rotate, revoke, configure). The other prose fields take a fence too, for an exact value such as a returned header.
 
    Attachments ride on one step (`findings[].sites[].visuals`, one per step, shown under its code) or on the finding (`findings[].visuals`, shown on the impact item): a screenshot (png, jpeg, webp, gif) shows as a picture, a recording (mp4, webm) as a player, anything else (a PoC script, a transaction dump, a log, an archive) as a download under its file name. `vig-op attach 2.3 drain.mp4 "drain runs in one tx"` uploads for the third step of finding 2 and writes the reference into findings.json; `vig-op attach 2 poc.py "the script"` puts it on the finding, with the impact. Images up to 8MB, recordings 64MB, files 16MB. Upload before `vig-op report`: the server refuses a document that references an attachment it does not hold, a step that carries more than one, and a finding with more than one recording.
 
@@ -69,6 +69,10 @@ vig-op har --host app.example.com capture.har   # web targets: routes (ids folde
 ```
 
 Replay uses `simulateTransaction` with signatures skipped and the blockhash replaced, on `VIG_RPC` (the public mainnet endpoint by default). Point `VIG_RPC` at a surfpool surfnet to replay against curated state; `whatif` uses its `surfnet_setAccount` and `surfnet_timeTravel` cheatcodes and refuses overrides anywhere else.
+
+## Lessons
+
+`vig-op claim` prints `lesson` lines before anything else: findings on earlier reports of this repository that the owner or an admin archived as not relevant, or rated up or down, each with the reason in their words. Read them before the code. Do not raise what was archived unless the code changed; rate like the corrections rated. The same list is `job.lessons` in job.json and `GET /v1/admin/lessons` for every repository.
 
 ## Posting as an agent
 

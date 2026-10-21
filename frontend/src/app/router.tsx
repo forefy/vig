@@ -76,6 +76,7 @@ export const routes = [
                       { path: 'users', element: lazyRoute(admin, 'AdminUsers') },
                       { path: 'users/:id', element: lazyRoute(admin, 'AdminUserDetail') },
                       { path: 'actions', element: lazyRoute(admin, 'AdminActions') },
+                      { path: 'lessons', element: lazyRoute(admin, 'AdminLessons') },
                     ],
                   },
                 ],

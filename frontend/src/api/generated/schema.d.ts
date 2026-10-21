@@ -89,6 +89,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/audits/delete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Delete several audits at once; each goes the way a single delete does, and the receipt says which did not */
+        post: operations["adminDeleteAudits"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/audits/{id}": {
         parameters: {
             query?: never;
@@ -243,6 +260,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/audits/{id}/report/findings/{fid}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Move a finding's status as admin; archiving needs a reason and the move joins its history */
+        patch: operations["adminSetFindingStatus"];
+        trace?: never;
+    };
     "/v1/admin/audits/{id}/report/findings/{fid}/severity": {
         parameters: {
             query?: never;
@@ -373,6 +407,23 @@ export interface paths {
         put?: never;
         /** View the app as a user, read-only, for a bounded time */
         post: operations["adminImpersonate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/admin/lessons": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** What owners and admins corrected on delivered findings: archived as not relevant, rated up or down, with the reasons; newest first, one repository or all */
+        get: operations["adminListLessons"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1802,7 +1853,19 @@ export interface components {
              * @example https://example.com/schemas/AdminDeleteInBody.json
              */
             readonly $schema?: string;
-            reason: string;
+            /** @description Optional; kept on the action log */
+            reason?: string;
+        };
+        AdminDeleteManyInBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/AdminDeleteManyInBody.json
+             */
+            readonly $schema?: string;
+            /** @description Audit ids to delete */
+            ids: string[] | null;
+            reason?: string;
         };
         AdminHideInBody: {
             /**
@@ -2127,6 +2190,16 @@ export interface components {
             state: string;
             user_id: string;
         };
+        DeletedMany: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/DeletedMany.json
+             */
+            readonly $schema?: string;
+            deleted: components["schemas"]["DeletedAudit"][] | null;
+            failed: components["schemas"]["Item"][] | null;
+        };
         Disclosure: {
             auditors?: string[] | null;
             contacts?: string[] | null;
@@ -2240,6 +2313,11 @@ export interface components {
             exploitable_by?: "anyone" | "any_user" | "internal" | "any_signer" | "account_owner" | "admin" | "upgrade_authority" | "other_program" | "internal_network" | "api_key" | "none";
             /** @description Required. A '- ' bullet per change. A code fence (three backticks on their own line, closed the same way) right after a bullet carries the definite fix: the correct code, the exact header value, the configuration line. A fence whose info line names a place, like rust src/lib.rs:41-45, is shown as a patch replacing those lines (path:line alone inserts before it) */
             fix: string;
+            /**
+             * @description Optional, defaults to code. A code fix on a finding that names a file must carry a placed patch (a fence naming path:start-end); operational says there are no lines to patch: rotate, revoke, configure
+             * @enum {string}
+             */
+            fix_kind?: "code" | "operational";
             /** @description Server-captured code for every fix fence that names a location; the page renders such a fence as a patch against these lines */
             fix_sites?: components["schemas"]["FixSite"][] | null;
             /** @description Server-assigned finding id, present on stored reports */
@@ -2274,10 +2352,12 @@ export interface components {
             /** @description The enclosing item at the location */
             snippet?: components["schemas"]["Snippet"];
             /**
-             * @description Optional, defaults to open.
+             * @description Optional, defaults to open. Set by the owner afterwards; archived means judged not relevant, with a reason on status_changes, and is not counted
              * @enum {string}
              */
-            status: "open" | "fixed" | "acknowledged" | "disputed";
+            status: "open" | "fixed" | "acknowledged" | "disputed" | "archived";
+            /** @description Server-kept history of status moves, oldest first, archiving with its reason. Ignored when posted */
+            status_changes?: components["schemas"]["StatusChange"][] | null;
             /** @description Required. */
             title: string;
             /** @description Optional. Attachments for the finding as a whole, shown on the impact item: the script that ran it, a recording, a dump. Served from the stored bytes by id. A finding carries one recording in all, here or on a step */
@@ -2302,8 +2382,10 @@ export interface components {
              * @example https://example.com/schemas/FindingStatusInBody.json
              */
             readonly $schema?: string;
+            /** @description Why, in a line; required when archiving, kept on the finding's history */
+            reason?: string;
             /** @enum {string} */
-            status: "open" | "fixed" | "acknowledged" | "disputed";
+            status: "open" | "fixed" | "acknowledged" | "disputed" | "archived";
         };
         FindingsDocument: {
             /**
@@ -2410,6 +2492,10 @@ export interface components {
             /** @enum {string} */
             status: "active" | "pending" | "removed";
         };
+        Item: {
+            error: string;
+            id: string;
+        };
         Job: {
             /**
              * Format: uri
@@ -2423,6 +2509,8 @@ export interface components {
             /** Format: date-time */
             clone_token_expires_at?: string;
             clone_url: string;
+            /** @description What owners and admins corrected on earlier reports of this repository: findings archived as not relevant and re-ratings, each with its reason. Read before writing findings; do not raise what was archived unless the code changed */
+            lessons?: components["schemas"]["Lesson"][] | null;
             /** @description Resolved source and the programs with their on-chain facts at intake */
             target: components["schemas"]["Target"];
             /** @description Job-scoped operator token */
@@ -2464,6 +2552,29 @@ export interface components {
             ref_id?: string;
             /** @description audit, purchase, tweet_claim, admin_action */
             ref_kind?: string;
+        };
+        Lesson: {
+            /** Format: date-time */
+            at: string;
+            audit_id: string;
+            /** @enum {string} */
+            by: "owner" | "admin" | "operator";
+            finding_id: string;
+            from: string;
+            /**
+             * @description What moved
+             * @enum {string}
+             */
+            kind: "severity" | "status";
+            /** Format: int64 */
+            ordinal: number;
+            reason: string;
+            repo: string;
+            /** @description The finding's current severity */
+            severity: string;
+            title: string;
+            /** @description For status, archived means judged not relevant */
+            to: string;
         };
         ListAPIKey: {
             /**
@@ -2545,6 +2656,15 @@ export interface components {
              */
             readonly $schema?: string;
             items: components["schemas"]["LedgerRow"][] | null;
+        };
+        ListLesson: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/ListLesson.json
+             */
+            readonly $schema?: string;
+            items: components["schemas"]["Lesson"][] | null;
         };
         ListNotification: {
             /**
@@ -3344,6 +3464,18 @@ export interface components {
              */
             unsafe: number;
         };
+        StatusChange: {
+            /** Format: date-time */
+            at: string;
+            /** @enum {string} */
+            by: "owner" | "admin" | "operator";
+            /** @enum {string} */
+            from: "open" | "fixed" | "acknowledged" | "disputed" | "archived";
+            /** @description Why; required when archiving */
+            reason?: string;
+            /** @enum {string} */
+            to: "open" | "fixed" | "acknowledged" | "disputed" | "archived";
+        };
         StepSpec: {
             fields: components["schemas"]["FieldSpec"][] | null;
             key: string;
@@ -3964,6 +4096,39 @@ export interface operations {
             };
         };
     };
+    adminDeleteAudits: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminDeleteManyInBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeletedMany"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     adminGetAudit: {
         parameters: {
             query?: never;
@@ -4306,6 +4471,42 @@ export interface operations {
             };
         };
     };
+    adminSetFindingStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                fid: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FindingStatusInBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Finding"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     adminSetFindingSeverity: {
         parameters: {
             query?: never;
@@ -4571,6 +4772,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ImpersonationState"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    adminListLessons: {
+        parameters: {
+            query?: {
+                /** @description owner/name; empty for every repository */
+                repo?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListLesson"];
                 };
             };
             /** @description Error */

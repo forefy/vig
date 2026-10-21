@@ -359,6 +359,11 @@ func cmdTemplate(w *workspace) error {
 func printJob(job api.Job) {
 	a := job.Audit
 	fmt.Printf("job        %s\n", a.ID)
+	// Lessons first: what the last reports on this code got wrong, in
+	// the owner's or admin's words, so they are not repeated.
+	for _, l := range job.Lessons {
+		fmt.Printf("lesson     #%02d %s  %s %s -> %s  %q  (%s)\n", l.Ordinal, l.Title, l.Kind, l.From, l.To, l.Reason, l.By)
+	}
 	fmt.Printf("repo       %s @ %s (%s)\n", a.Repo, short(a.HeadSHA), a.Coverage)
 	if a.BaseSHA != "" {
 		fmt.Printf("base       %s\n", short(a.BaseSHA))

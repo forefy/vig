@@ -304,32 +304,23 @@ export function StateAction({ audit, onDone, icon }: { audit: AuditFacts; onDone
   )
 }
 
-// Deletes the row and everything under it. The facts in the dialog are
-// what goes and what comes back; the action log keeps the receipt.
+// Deletes the row and everything under it in one click; the action log
+// keeps the receipt and the toast says what went.
 export function DeleteAction({ audit, onDone, icon }: { audit: AuditFacts; onDone: () => void; icon?: boolean }) {
-  const refunded = audit.state === 'failed' || audit.state === 'cancelled'
-  return (
-    <ReasonAction
-      label="Delete"
-      tone="destructive"
-      icon={icon ? <Trash2 /> : undefined}
-      facts={
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="font-mono text-xs">{audit.repo}</span>
-          <StateBadge state={auditState[audit.state] ?? 'neutral'}>{stageWord[audit.state] ?? audit.state}</StateBadge>
-          {audit.report_id && <StateBadge state="bad">report</StateBadge>}
-          {!refunded && <StateBadge state="ok">{audit.cost_kind === 'credit' ? 'credit restored' : 'slot restored'}</StateBadge>}
-        </div>
+  const { busy, run } = useBusy()
+  const del = () =>
+    run(async () => {
+      const r = await api.DELETE('/v1/admin/audits/{id}', { params: { path: { id: audit.id } }, body: {} })
+      if (r.error || !r.data) toast.error(problemDetail(r.error, 'Failed'))
+      else {
+        toast.success(`deleted · ${r.data.events} events${r.data.reports ? ` · ${r.data.reports} report${r.data.reports === 1 ? '' : 's'}` : ''}${r.data.refunded ? ' · cost restored' : ''}`)
+        onDone()
       }
-      onRun={async (reason) => {
-        const r = await api.DELETE('/v1/admin/audits/{id}', { params: { path: { id: audit.id } }, body: { reason } })
-        if (r.error || !r.data) toast.error(problemDetail(r.error, 'Failed'))
-        else {
-          toast.success(`deleted · ${r.data.events} events${r.data.reports ? ` · ${r.data.reports} report${r.data.reports === 1 ? '' : 's'}` : ''}${r.data.refunded ? ' · cost restored' : ''}`)
-          onDone()
-        }
-      }}
-    />
+    })
+  return icon ? (
+    <Button size="icon-xs" variant="ghost" aria-label="Delete" disabled={busy} className="text-muted-foreground hover:text-bad" onClick={del}><Trash2 /></Button>
+  ) : (
+    <Button size="sm" variant="destructive" disabled={busy} onClick={del}>Delete</Button>
   )
 }
 

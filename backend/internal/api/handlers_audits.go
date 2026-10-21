@@ -30,7 +30,8 @@ type findingStatusIn struct {
 	ID   string `path:"id"`
 	FID  string `path:"fid"`
 	Body struct {
-		Status core.FindingStatus `json:"status" enum:"open,fixed,acknowledged,disputed"`
+		Status core.FindingStatus `json:"status" enum:"open,fixed,acknowledged,disputed,archived"`
+		Reason string             `json:"reason,omitempty" maxLength:"140" doc:"Why, in a line; required when archiving, kept on the finding's history"`
 	}
 }
 
@@ -227,7 +228,11 @@ func (d *Deps) setFindingStatus(ctx context.Context, in *findingStatusIn) (*body
 	if err != nil {
 		return nil, err
 	}
-	f, err := d.Store.SetFindingStatus(ctx, r.ID, in.FID, in.Body.Status)
+	reason := strings.TrimSpace(in.Body.Reason)
+	if in.Body.Status == core.FindingArchived && len(reason) < 3 {
+		return nil, huma.Error422UnprocessableEntity("archiving a finding needs a reason")
+	}
+	f, err := d.Store.SetFindingStatus(ctx, r.ID, in.FID, in.Body.Status, reason, "owner", principal(ctx).UserID)
 	if err != nil {
 		return nil, fail(err)
 	}

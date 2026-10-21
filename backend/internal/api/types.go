@@ -288,6 +288,24 @@ type Job struct {
 	CloneURL          string     `json:"clone_url"`
 	CloneToken        string     `json:"clone_token,omitempty" doc:"One-hour GitHub installation token for private repos"`
 	CloneTokenExpires *time.Time `json:"clone_token_expires_at,omitempty"`
+	Lessons           []Lesson   `json:"lessons,omitempty" doc:"What owners and admins corrected on earlier reports of this repository: findings archived as not relevant and re-ratings, each with its reason. Read before writing findings; do not raise what was archived unless the code changed"`
+}
+
+// Lesson is one correction a person made to a delivered finding, with its
+// reason: what the next report on the same code should not repeat.
+type Lesson struct {
+	AuditID   string        `json:"audit_id"`
+	Repo      string        `json:"repo"`
+	FindingID string        `json:"finding_id"`
+	Ordinal   int           `json:"ordinal"`
+	Title     string        `json:"title"`
+	Severity  core.Severity `json:"severity" doc:"The finding's current severity"`
+	Kind      string        `json:"kind" enum:"severity,status" doc:"What moved"`
+	From      string        `json:"from"`
+	To        string        `json:"to" doc:"For status, archived means judged not relevant"`
+	Reason    string        `json:"reason"`
+	By        string        `json:"by" enum:"owner,admin,operator"`
+	At        time.Time     `json:"at"`
 }
 
 // ---- admin ----

@@ -15,9 +15,9 @@ func sample() FindingsDocument {
 		},
 		Findings: []Finding{
 			{Ordinal: 1, Severity: SeverityCritical, Title: "Missing signer check", Location: Location{File: "src/lib.rs", LineStart: 41, LineEnd: 58},
-				Description: "d", ExploitPath: "call withdraw without signing", Fix: "- require signer"},
+				Description: "d", ExploitPath: "call withdraw without signing", Fix: "- require signer", FixKind: FixOperational},
 			{Ordinal: 2, Severity: SeverityLow, Title: "Unused account", Location: Location{File: "src/lib.rs", LineStart: 3},
-				Description: "d", Fix: "- remove", Status: FindingAcknowledged},
+				Description: "d", Fix: "- remove", FixKind: FixOperational, Status: FindingAcknowledged},
 		},
 	}
 }
@@ -37,7 +37,7 @@ func TestValidateFillsSummaryAndStatus(t *testing.T) {
 
 func TestValidateRejects(t *testing.T) {
 	d := sample()
-	d.Findings = append(d.Findings, Finding{Ordinal: 1, Severity: "urgent", Title: "x", Location: Location{File: "f", LineStart: 5, LineEnd: 2}, Description: "d", Fix: "- f"})
+	d.Findings = append(d.Findings, Finding{Ordinal: 1, Severity: "urgent", Title: "x", Location: Location{File: "f", LineStart: 5, LineEnd: 2}, Description: "d", Fix: "- f", FixKind: FixOperational})
 	err := d.Validate()
 	if err == nil {
 		t.Fatal("expected errors")
@@ -245,5 +245,36 @@ func TestOneRecordingPerFinding(t *testing.T) {
 	d.Findings[0].Visuals = []Visual{{ID: id, Caption: "the script", Mime: "text/x-python", Name: "poc.py"}}
 	if err := d.Validate(); err != nil {
 		t.Fatalf("one recording and a file: %v", err)
+	}
+}
+
+func TestLocatedFindingNeedsPatchOrOperational(t *testing.T) {
+	d := sample()
+	d.Findings[0].FixKind = ""
+	d.Findings[0].Fix = "- require signer"
+	err := d.Validate()
+	if err == nil || !contains(err.Error(), "carries no patch") {
+		t.Fatalf("bare fix on a located finding passed: %v", err)
+	}
+	d.Findings[0].Fix = "- require signer\n```rust src/lib.rs:41-58\nrequire!(ctx.accounts.authority.is_signer);\n```"
+	if err := d.Validate(); err != nil {
+		t.Fatalf("placed patch: %v", err)
+	}
+	d.Findings[0].Fix = "- rotate the key"
+	d.Findings[0].FixKind = FixOperational
+	if err := d.Validate(); err != nil {
+		t.Fatalf("operational: %v", err)
+	}
+	d.Findings[0].FixKind = "magic"
+	if err := d.Validate(); err == nil || !contains(err.Error(), "fix_kind must be") {
+		t.Fatalf("bad kind passed: %v", err)
+	}
+	// A finding with no file (a web endpoint) is not held to it.
+	d = sample()
+	d.Findings[0].FixKind = ""
+	d.Findings[0].Location = Location{URL: "https://app.example/x", LineStart: 1}
+	d.Findings[0].Fix = "- require a session on the route"
+	if err := d.Validate(); err != nil {
+		t.Fatalf("url-only finding: %v", err)
 	}
 }

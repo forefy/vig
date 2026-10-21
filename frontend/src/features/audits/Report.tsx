@@ -38,6 +38,56 @@ function programTip(pin: { programs?: { id: string; slot: number; match: string 
   return p ? [p.match.replace('_', '-'), p.slot > 0 ? `${words.height} ${p.slot.toLocaleString('en-US')}` : ''].filter(Boolean).join(' \u00b7 ') : id
 }
 
+// The status control: a select; archiving opens the reason first, since a
+// finding judged not relevant is a lesson for the next report and the
+// reason is the lesson.
+function StatusPick({ finding, onStatus }: { finding: Finding; onStatus: (f: Finding, status: Finding['status'], reason?: string) => Promise<void> | void }) {
+  const [archiving, setArchiving] = useState(false)
+  const [reason, setReason] = useState('')
+  const [busy, setBusy] = useState(false)
+  return (
+    <>
+      <Select value={finding.status} onValueChange={(v) => { if (!v || v === finding.status) return; if (v === 'archived') setArchiving(true); else void onStatus(finding, v as Finding['status']) }}>
+        <SelectTrigger size="sm" className="w-36" aria-label="Finding status"><SelectValue /></SelectTrigger>
+        <SelectContent>
+          {(Object.keys(statusWord) as Finding['status'][]).map((s) => (
+            <SelectItem key={s} value={s}>{statusWord[s]}</SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Dialog open={archiving} onOpenChange={(o) => { if (!o) { setArchiving(false); setReason('') } }}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogTitle className="label-caps">archive</DialogTitle>
+          <div className="flex items-center gap-2">
+            <StateBadge state={severityState[finding.severity]}>{finding.severity}</StateBadge>
+            <span className="truncate text-[13px] text-foreground/80">{finding.title}</span>
+          </div>
+          <Input value={reason} onChange={(e) => setReason(e.target.value.slice(0, 140))} placeholder="why it is not relevant" aria-label="Reason" className="h-9" maxLength={140} autoFocus />
+          <Button
+            size="sm"
+            className="w-fit"
+            disabled={reason.trim().length < 3 || busy}
+            onClick={async () => {
+              setBusy(true)
+              try {
+                await onStatus(finding, 'archived', reason.trim())
+                setArchiving(false)
+                setReason('')
+              } catch {
+                /* the toast said it */
+              } finally {
+                setBusy(false)
+              }
+            }}
+          >
+            Archive
+          </Button>
+        </DialogContent>
+      </Dialog>
+    </>
+  )
+}
+
 // The severity control: a select that opens the reason once a different
 // rating is picked, and only fires with the reason filled. The current
 // rating stays until the server has the change.
@@ -104,7 +154,8 @@ const exploitableState: Record<string, 'bad' | 'warn' | 'neutral'> = {
   none: 'neutral',
 }
 
-const statusWord = { open: 'open', fixed: 'fixed', acknowledged: 'acknowledged', disputed: 'disputed' } as const
+const statusWord = { open: 'open', fixed: 'fixed', acknowledged: 'acknowledged', disputed: 'disputed', archived: 'archived' } as const
+const statusState: Record<string, 'ok' | 'warn' | 'neutral' | 'pending'> = { open: 'neutral', fixed: 'ok', acknowledged: 'neutral', disputed: 'warn', archived: 'pending' }
 
 // Document archetype: pinning header, findings stream, side index.
 export function ReportPage() {
@@ -173,11 +224,14 @@ export function ReportPage() {
       <ReportBody
         report={r}
         surfaceHref={`/app/audits/${id}/surface`}
-        onStatus={async (f, status) => {
+        onStatus={async (f, status, reason) => {
           if (!f.id) return
-          const res = await api.PATCH('/v1/audits/{id}/report/findings/{fid}', { params: { path: { id, fid: f.id } }, body: { status } })
-          if (res.error) toast.error('Could not update')
-          else invalidate()
+          const res = await api.PATCH('/v1/audits/{id}/report/findings/{fid}', { params: { path: { id, fid: f.id } }, body: { status, reason } })
+          if (res.error) {
+            toast.error('Could not update')
+            throw new Error('status failed')
+          }
+          invalidate()
         }}
         onSeverity={async (f, severity, reason) => {
           if (!f.id) return
@@ -196,7 +250,7 @@ export function ReportPage() {
 // snake folds an instruction name into the surface's node spelling.
 const snake = (s: string) => s.replace(/[A-Z]/g, (m, i) => (i > 0 ? '_' : '') + m.toLowerCase())
 
-export function ReportBody({ report, onStatus, onSeverity, surfaceHref }: { report: Report; onStatus?: (f: Finding, status: Finding['status']) => void; onSeverity?: (f: Finding, severity: Finding['severity'], reason: string) => Promise<void>; surfaceHref?: string }) {
+export function ReportBody({ report, onStatus, onSeverity, surfaceHref }: { report: Report; onStatus?: (f: Finding, status: Finding['status'], reason?: string) => Promise<void> | void; onSeverity?: (f: Finding, severity: Finding['severity'], reason: string) => Promise<void>; surfaceHref?: string }) {
   const doc = report.document
   const reportPin = doc.report.pin
   const words = chainWords(report.adapter)
@@ -235,8 +289,16 @@ export function ReportBody({ report, onStatus, onSeverity, surfaceHref }: { repo
     } catch { /* storage may be unavailable */ }
   }
   const facets = facetsOf(all, words)
-  const findings = all.filter((f) => matches(f, facets, query))
+  const archived = all.filter((f) => f.status === 'archived')
+  const findings = all.filter((f) => f.status !== 'archived' && matches(f, facets, query))
   const groups = order.map((s) => ({ s, items: findings.filter((f) => f.severity === s) })).filter((g) => g.items.length)
+  // Every correction on this report, newest first: what moved, why, who.
+  const changes = all
+    .flatMap((f) => [
+      ...(f.severity_changes ?? []).map((c) => ({ f, kind: 'severity' as const, from: c.from, to: c.to, reason: c.reason, by: c.by, at: c.at })),
+      ...(f.status_changes ?? []).map((c) => ({ f, kind: 'status' as const, from: c.from, to: c.to, reason: c.reason ?? '', by: c.by, at: c.at })),
+    ])
+    .sort((a, b) => b.at.localeCompare(a.at))
   const [active, setActive] = useState<number | null>(all[0]?.ordinal ?? null)
   const stream = useRef<HTMLDivElement>(null)
 
@@ -271,6 +333,32 @@ export function ReportBody({ report, onStatus, onSeverity, surfaceHref }: { repo
       <div ref={stream} className="flex flex-col gap-10">
         <SummaryStrip summary={doc.report.summary} />
         {(doc.report.known ?? []).length > 0 && <KnownStrip known={doc.report.known ?? []} repo={reportPin.repo} commit={reportPin.commit} />}
+        {/* The report's own log, folded: every re-rating and status move on
+            any finding, newest first. The strip says how many; a click opens
+            them. */}
+        {changes.length > 0 && (
+          <details className="group rounded-md border border-border bg-card">
+            <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2 text-[12px] text-muted-foreground [&::-webkit-details-marker]:hidden">
+              <ChevronRight className="size-3.5 transition-transform group-open:rotate-90" aria-hidden="true" />
+              <span className="label-caps">changes</span>
+              <span className="num">{changes.length}</span>
+              <span className="ml-auto truncate font-mono text-[11px] text-faint">{relTime(changes[0]?.at ?? '')}</span>
+            </summary>
+            <ol className="divide-y divide-border border-t border-border">
+              {changes.map((c, i) => (
+                <li key={i} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 text-[12.5px]">
+                  <a href={`#f-${c.f.ordinal}`} className="num text-muted-foreground hover:text-foreground">{String(c.f.ordinal).padStart(2, '0')}</a>
+                  <span className="truncate text-foreground/80">{c.f.title}</span>
+                  <StateBadge state={c.kind === 'severity' ? severityState[c.from] : (statusState[c.from] ?? 'neutral')} className="h-5 px-1.5 text-[10.5px]">{c.from}</StateBadge>
+                  <ArrowRight className="size-3 text-faint" aria-hidden="true" />
+                  <StateBadge state={c.kind === 'severity' ? severityState[c.to] : (statusState[c.to] ?? 'neutral')} className="h-5 px-1.5 text-[10.5px]">{c.to}</StateBadge>
+                  {c.reason && <span className="text-muted-foreground">{c.reason}</span>}
+                  <span className="ml-auto font-mono text-[11px] text-faint">{c.by} · {relTime(c.at)}</span>
+                </li>
+              ))}
+            </ol>
+          </details>
+        )}
         {all.length > 0 && <QueryLine facets={facets} all={all} query={query} onChange={setQuery} shown={findings.length} total={all.length} />}
         {findings.length === 0 && all.length > 0 && (
           <div className="flex items-center justify-center rounded-md border border-dashed border-border px-6 py-14">
@@ -358,30 +446,23 @@ export function ReportBody({ report, onStatus, onSeverity, surfaceHref }: { repo
                   <div className="flex shrink-0 items-center gap-2">
                     {onSeverity && f.id && <Rerate finding={f} onSeverity={onSeverity} />}
                     {onStatus && f.id ? (
-                      <Select value={f.status} onValueChange={(v) => v && onStatus(f, v as Finding['status'])}>
-                        <SelectTrigger size="sm" className="w-36" aria-label="Finding status"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          {(Object.keys(statusWord) as Finding['status'][]).map((s) => (
-                            <SelectItem key={s} value={s}>{statusWord[s]}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <StatusPick finding={f} onStatus={onStatus} />
                     ) : (
-                      <StateBadge state={f.status === 'fixed' ? 'ok' : f.status === 'disputed' ? 'warn' : 'neutral'}>{f.status}</StateBadge>
+                      <StateBadge state={statusState[f.status] ?? 'neutral'}>{f.status}</StateBadge>
                     )}
                   </div>
                 </header>
                 {/* Every re-rating, oldest first: what it was, what it became,
                     why, who, when. Append-only on the server; a revision that
                     rates differently is one more row here. */}
-                {(f.severity_changes ?? []).length > 0 && (
+                {changes.some((c) => c.f === f) && (
                   <ol className="flex flex-col gap-1 border-l border-border pl-3">
-                    {(f.severity_changes ?? []).map((c, i) => (
+                    {changes.filter((c) => c.f === f).slice().reverse().map((c, i) => (
                       <li key={i} className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-muted-foreground">
-                        <StateBadge state={severityState[c.from]} className="h-5 px-1.5 text-[10.5px]">{c.from}</StateBadge>
+                        <StateBadge state={c.kind === 'severity' ? severityState[c.from] : (statusState[c.from] ?? 'neutral')} className="h-5 px-1.5 text-[10.5px]">{c.from}</StateBadge>
                         <ArrowRight className="size-3 text-faint" aria-hidden="true" />
-                        <StateBadge state={severityState[c.to]} className="h-5 px-1.5 text-[10.5px]">{c.to}</StateBadge>
-                        <span className="text-foreground/80">{c.reason}</span>
+                        <StateBadge state={c.kind === 'severity' ? severityState[c.to] : (statusState[c.to] ?? 'neutral')} className="h-5 px-1.5 text-[10.5px]">{c.to}</StateBadge>
+                        {c.reason && <span className="text-foreground/80">{c.reason}</span>}
                         <span className="font-mono text-[11px]">{c.by}</span>
                         <span className="font-mono text-[11px]" title={c.at}>{relTime(c.at)}</span>
                       </li>
@@ -430,6 +511,33 @@ export function ReportBody({ report, onStatus, onSeverity, surfaceHref }: { repo
             ))}
           </section>
         ))}
+        {/* Archived: judged not relevant, with the reason, never counted and
+            never gone. The status control brings one back. */}
+        {archived.length > 0 && (
+          <section className="flex flex-col gap-2">
+            <span className="label-caps text-faint">archived</span>
+            <ol className="divide-y divide-border rounded-md border border-dashed border-border">
+              {archived.map((f) => {
+                const last = [...(f.status_changes ?? [])].reverse().find((c) => c.to === 'archived')
+                return (
+                  <li key={f.id ?? f.ordinal} id={`f-${f.ordinal}`} className="flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 text-[13px]">
+                    <span className="num text-muted-foreground">{String(f.ordinal).padStart(2, '0')}</span>
+                    <StateBadge state={severityState[f.severity]} className="h-5 px-1.5 text-[10.5px] opacity-70">{f.severity}</StateBadge>
+                    <span className="text-foreground/80">{f.title}</span>
+                    {last && (
+                      <>
+                        <span className="text-muted-foreground">{last.reason}</span>
+                        <span className="font-mono text-[11px] text-faint">{last.by}</span>
+                        <span className="font-mono text-[11px] text-faint" title={last.at}>{relTime(last.at)}</span>
+                      </>
+                    )}
+                    {onStatus && f.id && <span className="ml-auto"><StatusPick finding={f} onStatus={onStatus} /></span>}
+                  </li>
+                )
+              })}
+            </ol>
+          </section>
+        )}
       </div>
       <aside className="hidden lg:block lg:sticky lg:top-8 lg:self-start">
         <nav aria-label="Findings">

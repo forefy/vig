@@ -108,6 +108,13 @@ func (d *Deps) claimJob(ctx context.Context, _ *struct{}) (*body[Job], error) {
 	}
 	d.notify(ctx, a.UserID, "audit_state", map[string]any{"audit_id": a.ID, "state": string(a.State)})
 	job := Job{Audit: out, Target: target, Token: req(ctx).Bearer, TokenExpiresAt: tok.ExpiresAt, CloneURL: "https://github.com/" + a.Repo + ".git"}
+	// What people corrected on earlier reports of this code rides with the
+	// job, so the operator (or agent) reads the lessons before the code.
+	if lessons, err := d.Store.ListLessons(ctx, a.Repo, 100); err == nil {
+		for _, l := range lessons {
+			job.Lessons = append(job.Lessons, toLesson(l))
+		}
+	}
 	if t.SourceKind == "installation" {
 		// Private source: mint a one-hour token scoped to this repository for
 		// the operator's clone. It is returned once and never stored.

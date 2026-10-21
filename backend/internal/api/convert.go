@@ -117,6 +117,10 @@ func toClaim(c store.TweetClaim) TweetClaim {
 	return TweetClaim{ID: c.ID, UserID: c.UserID, Nonce: c.Nonce, URL: c.URL, State: c.State, Reason: c.Reason, ReviewedAt: c.ReviewedAt, CreatedAt: c.CreatedAt}
 }
 
+func toLesson(l store.Lesson) Lesson {
+	return Lesson{AuditID: l.AuditID, Repo: l.Repo, FindingID: l.FindingID, Ordinal: l.Ordinal, Title: l.Title, Severity: l.Severity, Kind: l.Kind, From: l.From, To: l.To, Reason: l.Reason, By: l.By, At: l.At}
+}
+
 func toAdminAction(a store.AdminAction) AdminAction {
 	return AdminAction{ID: a.ID, AdminID: a.AdminID, Kind: a.Kind, SubjectKind: a.SubjectKind, SubjectID: a.SubjectID, Payload: a.Payload, CreatedAt: a.CreatedAt}
 }
