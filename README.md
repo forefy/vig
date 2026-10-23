@@ -1,4 +1,4 @@
-# Security Audits, Down to the Bytecode
+# Reporting Dashboard and Determinism Layer for Security Audit Reports
 
 <p align="center">
   <picture>
@@ -28,40 +28,55 @@
 
 ## <img src="frontend/public/icon-512.png" alt="" width="22" align="top"/> What is vig
 
-vig is a security audit service for on-chain programs and live web applications, sold as credits and delivered as a report the owner can act on.
+vig is a reporting dashboard and determinism layer for security audit reports.
+
+Findings arrive from many places: an operator in a sandbox, an agent emitting JSON, a fuzzer's crashes, a bounty programme's triage, the previous audit of the same code. vig is where they all land. On the way in, every finding takes one shape, is pinned to the exact commit and deployed build it describes, and is bound to the evidence that established it. On the way out there is one report, read on one dashboard, with every later correction kept.
 
 <p align="center">A delivered report</p>
 <p align="center">
 <img src="docs/screenshots/report.png" alt="A delivered report: the pinned repository and verified build, the severity ladder, the changes log, and the first finding read as a chain with the exploitable line marked" title="A delivered report" width="900"/>
 </p>
 
-Point it at a repository (Solana or Ethereum) or a live site. The deployed code is pinned and verified against the source, an operator works the audit in a sandbox with a live map of the target, and every finding comes back as a chain the owner can follow: how the code is normally used, what it must guarantee, the steps that break it with captures and recordings, who loses what. Fixes are patches against the exact lines at the pinned commit. Nothing a person corrects on a report is ever lost, and the next audit of the same code starts from those corrections.
-
 The report above is the seeded demo (`make seed`, then `/r/vault-signer-check`): an invented program with invented findings.
 
-- [How an audit runs](#how-an-audit-runs)
-- [How a report reads](#how-a-report-reads)
+- [Determinism](#determinism)
+- [The dashboard](#the-dashboard)
+- [Where findings come from](#where-findings-come-from)
 - [How to run it locally](#how-to-run-it-locally)
 - [What is in the box](#what-is-in-the-box)
 - [For agents and operators](#for-agents-and-operators)
 - [What is missing](#what-is-missing)
 
-## How an audit runs
+## Determinism
 
-1. **Pin.** The repository and commit are resolved, the deployed bytecode is fetched, and the two are compared: `verified`, `self-built`, `mismatch` or `unverified`, said on every report.
-2. **Map.** The target's surface is drawn before anyone reads a line: programs, instructions and accounts for a chain, hosts, routes and parameters for a site, lit by live traffic and by what the operator has reviewed.
-3. **Work.** An operator claims the job with a token bound to that one audit and works it in a throwaway sandbox through the operator CLI. There is no standing key that can read every customer's code.
-4. **Deliver.** The findings document is validated for shape, the code at every location is captured from the checkout, and the report goes to the owner. Exploit details are shown only to proven owners.
-5. **Correct.** The owner re-rates or archives findings with a reason; an admin can revise. Every move stays on the finding, and surfaces as a lesson on the next job for the same repository.
+Two reports of the same code by two different authors should disagree only where the authors disagree, never in shape, in what they point at, or in what counts. vig enforces that at the door.
 
-## How a report reads
+- **One shape.** A findings document is the single exchange format: the operator CLI posts it, an agent emits it, the page renders it, the JSON export is it. Validation refuses anything outside the shape: prose over 600 characters a paragraph, a fix that is not bullets, a fence that names a place that does not exist, an attachment the audit does not hold.
+- **Pinned.** Every report names the repository, the full commit and, for a chain target, the deployed program and its bytecode hash, with the match said plainly: `verified`, `self-built`, `mismatch` or `unverified`. The code at every location is captured from that commit when the report is submitted, so the report never depends on the repository staying where it was.
+- **Evidence bound.** A finding says how it was established: static reading, a fuzz crash, an on-chain transaction, a bytecode offset, a live request. Captures, recordings and files are stored by content and referenced by id; a document cannot claim a type, a name or a size the bytes do not have.
+- **Patches, not prose.** A fix that names lines renders as a diff against those lines at the pinned commit, linked to them, with the original lines shown as removed.
+- **Nothing is lost.** Severity re-ratings and archivals take a reason and stay on the finding forever, through every revision. Archived findings leave the counts, never the report. The summary is derived from the current ratings, never edited.
+- **Lessons.** Corrections on delivered reports are listed per repository and ride on the next job for the same code, so the next author reads what the last one got wrong before reading a line.
 
-- **The severity ladder**: five hues, one per severity, never borrowed from a state colour.
-- **A chain per finding**: normal use, expected, the numbered code steps with their lines marked and one capture or recording each, then impact with the finding's own attachments.
-- **Fixes as patches**: a bullet per change; code that names its place renders as a diff against the pinned commit, linked to the lines.
-- **A query line**: fold the findings by severity, status, who can reach them, how they were established, file, function or route, with counts that narrow as you type.
-- **History that stays**: re-ratings and archives with their reasons, on the finding and in a folded changes log; the summary follows the current ratings.
-- **One map for every kind of target**: the same picture for a program and a website, with the words swapped.
+## The dashboard
+
+- **The report**: a severity ladder in five hues, a query line that folds findings by severity, status, who can reach them, how they were established, file, function or route, with counts that narrow as you type, and an index that reads in the stream's order.
+- **A chain per finding**: normal use, what the code must guarantee, the numbered steps that break it with their lines marked and a capture or recording on each, then impact with the finding's own attachments.
+- **History in place**: every re-rating and status move under its finding, and a folded changes log for the whole report.
+- **The surface**: a live map of the target drawn before anyone reads a line, programs, instructions and accounts for a chain, hosts, routes and parameters for a site, lit by traffic, by what was reviewed, and by the findings.
+- **Operations**: the queue, every audit across users, re-rating and archiving as admin, bulk deletes, the action log, and the lessons across all repositories.
+
+## Where findings come from
+
+| Source | Enters through |
+|---|---|
+| An operator in the sandbox | `vig-op report`, with `vig-op attach` for captures and files and `vig-op report --check` for a dry run |
+| An agent | the same findings document, posted to the job-scoped operator API |
+| A fuzzer or a tool | `evidence` on the finding: the tool, the crash input, the harness |
+| A bounty programme or a review | an admin revision of the delivered report |
+| The previous audit of the same code | `known` on the report, and lessons on the next job |
+
+Target kinds are adapters: Solana programs, EVM contracts and live web applications today, with the core never knowing a chain.
 
 ## How to run it locally
 
@@ -92,16 +107,14 @@ Env files: copy `secrets/.env.backend.example` to `secrets/.env.backend.local` a
 
 ## For agents and operators
 
-The findings document is the one exchange format: the operator CLI posts it, an agent emits it, the report page renders it, the JSON export is it. Everything an author needs is in the API:
+Everything an author needs to produce a report that passes is in the API:
 
 - `GET /v1/findings/shape` lists the required, recommended and optional fields, the rules validation applies, and a filled example.
 - Every field's description in the OpenAPI document opens with `Required`, `Recommended` or `Optional`.
 - `POST /v1/op/jobs/{id}/report/check` is a dry run: what would be refused, and what the report reads better with.
-- A claimed job carries the lessons from earlier reports on the same repository: what was archived as not relevant and what was re-rated, with the reasons.
+- A claimed job carries the lessons from earlier reports on the same repository.
 
-`vig-op template`, `vig-op attach`, `vig-op report --check` do the same from the sandbox. The operator guide is at [docs/operator.md](docs/operator.md).
-
-Working on the code: `make gen` regenerates the TypeScript client and CI fails on drift; `make test` and `make lint` run the suites. `CLAUDE.md` is the working contract for anyone, human or agent, changing this repo.
+The operator guide is at [docs/operator.md](docs/operator.md). Working on the code: `make gen` regenerates the TypeScript client and CI fails on drift; `make test` and `make lint` run the suites. `CLAUDE.md` is the working contract for anyone, human or agent, changing this repo.
 
 ## What is missing
 
