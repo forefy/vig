@@ -1,7 +1,11 @@
 # Security Audits, Down to the Bytecode
 
 <p align="center">
-<img src="frontend/public/icon-512.png" alt="vig" title="vig" width="160"/>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/hero/hero-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="docs/hero/hero-light.svg">
+    <img src="docs/hero/hero-dark.svg" alt="A repository and its deployed bytecode are pinned together, the program's surface lights up under live traffic, a report comes out with a severity ladder and a finding read as a chain, and the owner's corrections flow back as lessons for the next audit" width="880"/>
+  </picture>
 </p>
 
 <p align="center">
@@ -22,7 +26,7 @@
 | <a href="https://twitter.com/messages/compose?recipient_id=1469398978185809922" title="Forefy Twitter DM">Twitter DM</a>
 </p>
 
-## What is vig
+## <img src="frontend/public/icon-512.png" alt="" width="22" align="top"/> What is vig
 
 vig is a security audit service for on-chain programs and live web applications, sold as credits and delivered as a report the owner can act on.
 

@@ -1,0 +1,131 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 380" role="img" aria-label="Findings from an operator, an agent, a fuzzer, a bounty programme and prior audits flow into vig, where each takes one shape, is pinned to a commit and bound to evidence. They come out as one report: a severity ladder, a query line that folds findings by who can reach them, each finding read as a chain, re-ratings kept with their reasons, and the corrections flowing back as lessons for the next audit.">
+  <style>
+    .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+    .caps { font-size: 8.5px; letter-spacing: 1.3px; fill: #71717a; }
+    .t { font-size: 10.5px; fill: #e4e4e7; }
+    .d { font-size: 9px; fill: #a1a1aa; }
+    .card { fill: #18181b; stroke: #27272a; }
+    .wire { fill: none; stroke: #3f3f46; stroke-width: 1.4; }
+    .pulse { fill: #86efac; }
+    @keyframes in1 { 0% { transform: translate(0,0); opacity: 0 } 4% { opacity: 1 } 16% { opacity: 1 } 20% { transform: translate(72px,104px); opacity: 0 } 100% { transform: translate(72px,104px); opacity: 0 } }
+    @keyframes in2 { 0% { transform: translate(0,0); opacity: 0 } 6% { opacity: 1 } 18% { opacity: 1 } 22% { transform: translate(72px,52px); opacity: 0 } 100% { transform: translate(72px,52px); opacity: 0 } }
+    @keyframes in3 { 0% { transform: translate(0,0); opacity: 0 } 8% { opacity: 1 } 20% { opacity: 1 } 24% { transform: translate(72px,0px); opacity: 0 } 100% { transform: translate(72px,0px); opacity: 0 } }
+    @keyframes in4 { 0% { transform: translate(0,0); opacity: 0 } 10% { opacity: 1 } 22% { opacity: 1 } 26% { transform: translate(72px,-52px); opacity: 0 } 100% { transform: translate(72px,-52px); opacity: 0 } }
+    @keyframes in5 { 0% { transform: translate(0,0); opacity: 0 } 12% { opacity: 1 } 24% { opacity: 1 } 28% { transform: translate(72px,-104px); opacity: 0 } 100% { transform: translate(72px,-104px); opacity: 0 } }
+    .i1 { animation: in1 9s ease-in-out infinite } .i2 { animation: in2 9s ease-in-out infinite } .i3 { animation: in3 9s ease-in-out infinite } .i4 { animation: in4 9s ease-in-out infinite } .i5 { animation: in5 9s ease-in-out infinite }
+    @keyframes chk1 { 0%, 20% { opacity: .25 } 25%, 100% { opacity: 1 } }
+    @keyframes chk2 { 0%, 25% { opacity: .25 } 30%, 100% { opacity: 1 } }
+    @keyframes chk3 { 0%, 30% { opacity: .25 } 35%, 100% { opacity: 1 } }
+    .c1 { animation: chk1 9s ease-in-out infinite } .c2 { animation: chk2 9s ease-in-out infinite } .c3 { animation: chk3 9s ease-in-out infinite }
+    @keyframes out { 0%, 34% { transform: translateX(0); opacity: 0 } 37% { opacity: 1 } 42% { opacity: 1 } 45%, 100% { transform: translateX(48px); opacity: 0 } }
+    .out { animation: out 9s ease-in-out infinite }
+    @keyframes show { 0%, 44% { opacity: 0 } 48%, 100% { opacity: 1 } }
+    .show { animation: show 9s ease-in-out infinite }
+    @keyframes typing { 0%, 52% { transform: translateX(0) } 64%, 100% { transform: translateX(150px) } }
+    .cover { animation: typing 9s steps(20, end) infinite }
+    @keyframes chip { 0%, 62% { stroke: #27272a; fill: #18181b } 66%, 100% { stroke: #86efac; fill: #0e2e12 } }
+    .chip-on { animation: chip 9s ease-in-out infinite }
+    @keyframes fade { 0%, 62% { opacity: 1 } 68%, 100% { opacity: .18 } }
+    .fade { animation: fade 9s ease-in-out infinite }
+    @keyframes n7 { 0%, 62% { opacity: 1 } 66%, 100% { opacity: 0 } }
+    @keyframes n3 { 0%, 62% { opacity: 0 } 66%, 100% { opacity: 1 } }
+    .n7 { animation: n7 9s ease-in-out infinite } .n3 { animation: n3 9s ease-in-out infinite }
+    @keyframes rerate { 0%, 72% { opacity: 0 } 76%, 100% { opacity: 1 } }
+    .rerate { animation: rerate 9s ease-in-out infinite }
+    @keyframes lesson { 0% { stroke-dashoffset: 0 } 100% { stroke-dashoffset: -28 } }
+    .lesson { stroke-dasharray: 4 3; animation: lesson 2.2s linear infinite }
+    @keyframes back { 0%, 80% { opacity: 0; transform: translate(0,0) } 84% { opacity: 1 } 96% { opacity: 1 } 99%, 100% { opacity: 0; transform: translate(-560px,0) } }
+    .back { animation: back 9s ease-in-out infinite }
+    @media (prefers-reduced-motion: reduce) { * { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important } }
+  </style>
+  <rect width="880" height="380" rx="12" fill="#0f0f12"/>
+
+  <!-- sources -->
+  <text x="40" y="36" class="mono caps">FINDINGS FROM</text>
+  <g class="mono">
+    <rect x="40" y="48" width="140" height="30" rx="7" class="card"/><text x="52" y="67" class="t">operator</text><text x="118" y="67" class="d">vig-op</text>
+    <rect x="40" y="100" width="140" height="30" rx="7" class="card"/><text x="52" y="119" class="t">agent</text><text x="118" y="119" class="d">JSON</text>
+    <rect x="40" y="152" width="140" height="30" rx="7" class="card"/><text x="52" y="171" class="t">fuzzer</text><text x="118" y="171" class="d">crashes</text>
+    <rect x="40" y="204" width="140" height="30" rx="7" class="card"/><text x="52" y="223" class="t">bounty</text><text x="118" y="223" class="d">triage</text>
+    <rect x="40" y="256" width="140" height="30" rx="7" class="card"/><text x="52" y="275" class="t">prior audits</text><text x="140" y="275" class="d">known</text>
+  </g>
+  <path class="wire" d="M180 63 C 216 63, 216 167, 252 167"/>
+  <path class="wire" d="M180 115 C 216 115, 216 167, 252 167"/>
+  <path class="wire" d="M180 167 L 252 167"/>
+  <path class="wire" d="M180 219 C 216 219, 216 167, 252 167"/>
+  <path class="wire" d="M180 271 C 216 271, 216 167, 252 167"/>
+  <circle class="pulse i1" cx="180" cy="63" r="3"/>
+  <circle class="pulse i2" cx="180" cy="115" r="3"/>
+  <circle class="pulse i3" cx="180" cy="167" r="3"/>
+  <circle class="pulse i4" cx="180" cy="219" r="3"/>
+  <circle class="pulse i5" cx="180" cy="271" r="3"/>
+
+  <!-- the sink -->
+  <text x="252" y="36" class="mono caps">ONE SINK</text>
+  <rect x="252" y="118" width="128" height="98" rx="8" class="card"/>
+  <g class="mono" font-size="9.5">
+    <g class="c1"><circle cx="266" cy="140" r="2.5" fill="#86efac"/><text x="275" y="143.5" fill="#e4e4e7">one shape</text></g>
+    <g class="c2"><circle cx="266" cy="166" r="2.5" fill="#86efac"/><text x="275" y="169.5" fill="#e4e4e7">pinned to commit</text></g>
+    <g class="c3"><circle cx="266" cy="192" r="2.5" fill="#86efac"/><text x="275" y="195.5" fill="#e4e4e7">evidence bound</text></g>
+  </g>
+  <path class="wire" d="M380 167 L 428 167"/>
+  <circle class="pulse out" cx="380" cy="167" r="3"/>
+
+  <!-- the report -->
+  <text x="428" y="36" class="mono caps">ONE REPORT</text>
+  <rect x="428" y="48" width="412" height="284" rx="10" class="card"/>
+  <text x="444" y="70" class="mono t" font-size="12">owner/vault</text>
+  <text x="528" y="70" class="mono d">3f9c1e…a7b2</text>
+  <rect x="608" y="60" width="52" height="13" rx="3" fill="#0e2e12"/><circle cx="616" cy="66.5" r="2" fill="#82e28d"/><text x="622" y="70" class="mono" font-size="8.5" fill="#82e28d">verified</text>
+
+  <!-- ladder -->
+  <g class="mono" font-size="7" fill="#71717a" letter-spacing="1">
+    <text x="448" y="92">CRITICAL</text><text x="528" y="92">HIGH</text><text x="608" y="92">MEDIUM</text><text x="688" y="92">LOW</text><text x="768" y="92">INFO</text>
+  </g>
+  <g class="mono show" font-size="15">
+    <text x="448" y="112" fill="#ef4444">1</text><text x="528" y="112" fill="#fca5a5">2</text><text x="608" y="112" fill="#fbbf24">2</text><text x="688" y="112" fill="#7dd3fc">1</text><text x="768" y="112" fill="#52525b">1</text>
+  </g>
+  <line x1="444" y1="122" x2="824" y2="122" stroke="#27272a"/>
+
+  <!-- query line, typed -->
+  <rect x="444" y="132" width="380" height="22" rx="5" fill="#0f0f12" stroke="#27272a"/>
+  <text x="454" y="146.5" class="mono" font-size="10" fill="#e4e4e7">exploitable = anyone</text>
+  <rect class="cover" x="454" y="134" width="150" height="18" fill="#0f0f12"/>
+  <text x="814" y="146.5" class="mono n7" font-size="9" fill="#a1a1aa" text-anchor="end">7 of 7</text>
+  <text x="814" y="146.5" class="mono n3" font-size="9" fill="#fbbf24" text-anchor="end">3 of 7</text>
+
+  <!-- facet chips -->
+  <g class="mono" font-size="8.5">
+    <text x="444" y="174" class="caps" font-size="7.5">EXPLOITABLE</text>
+    <rect x="530" y="163" width="66" height="15" rx="3" class="chip-on" stroke="#27272a" fill="#18181b"/><text x="537" y="174" fill="#e4e4e7">anyone</text><text x="580" y="174" fill="#71717a">3</text>
+    <rect x="602" y="163" width="82" height="15" rx="3" class="card"/><text x="609" y="174" fill="#a1a1aa">any signer</text><text x="668" y="174" fill="#71717a">2</text>
+    <rect x="690" y="163" width="50" height="15" rx="3" class="card"/><text x="697" y="174" fill="#a1a1aa">admin</text><text x="728" y="174" fill="#71717a">1</text>
+    <rect x="746" y="163" width="48" height="15" rx="3" class="card"/><text x="753" y="174" fill="#a1a1aa">none</text><text x="782" y="174" fill="#71717a">1</text>
+  </g>
+
+  <!-- finding rows -->
+  <g class="mono" font-size="9.5">
+    <g><circle cx="450" cy="195" r="2.5" fill="#ef4444"/><text x="460" y="198.5" fill="#71717a">01</text><text x="478" y="198.5" fill="#e4e4e7">Missing signer check on withdraw authority</text><text x="814" y="198.5" fill="#f87171" text-anchor="end">anyone</text></g>
+    <g class="fade"><circle cx="450" cy="213" r="2.5" fill="#fca5a5"/><text x="460" y="216.5" fill="#71717a">02</text><text x="478" y="216.5" fill="#e4e4e7">Owner check missing on token account</text><text x="814" y="216.5" fill="#a1a1aa" text-anchor="end">any signer</text></g>
+    <g><circle cx="450" cy="231" r="2.5" fill="#fca5a5"/><text x="460" y="234.5" fill="#71717a">03</text><text x="478" y="234.5" fill="#e4e4e7">Arbitrary CPI target in transfer</text><text x="814" y="234.5" fill="#f87171" text-anchor="end">anyone</text></g>
+    <g class="fade"><circle cx="450" cy="249" r="2.5" fill="#fbbf24"/><text x="460" y="252.5" fill="#71717a">04</text><text x="478" y="252.5" fill="#e4e4e7">Fee rounds in favour of the caller</text><text x="814" y="252.5" fill="#a1a1aa" text-anchor="end">any signer</text></g>
+    <g class="fade"><circle cx="450" cy="267" r="2.5" fill="#fbbf24"/><text x="460" y="270.5" fill="#71717a">05</text><text x="478" y="270.5" fill="#e4e4e7">Parameter change has no delay</text><text x="814" y="270.5" fill="#a1a1aa" text-anchor="end">admin</text></g>
+    <g><circle cx="450" cy="285" r="2.5" fill="#7dd3fc"/><text x="460" y="288.5" fill="#71717a">06</text><text x="478" y="288.5" fill="#e4e4e7">Closed account revived in the same tx</text><text x="814" y="288.5" fill="#f87171" text-anchor="end">anyone</text></g>
+    <g class="fade"><circle cx="450" cy="303" r="2.5" fill="#52525b"/><text x="460" y="306.5" fill="#71717a">07</text><text x="478" y="306.5" fill="#e4e4e7">Unused error variants</text><text x="814" y="306.5" fill="#a1a1aa" text-anchor="end">none</text></g>
+  </g>
+
+  <!-- the re-rating on 03, kept with its reason -->
+  <g class="rerate mono" font-size="8.5">
+    <rect x="478" y="316" width="346" height="12" rx="3" fill="#0f0f12"/>
+    <rect x="482" y="317" width="30" height="10" rx="2" fill="#3f1515"/><text x="486" y="325" fill="#fca5a5">high</text>
+    <text x="516" y="325" fill="#52525b">→</text>
+    <rect x="526" y="317" width="40" height="10" rx="2" fill="#422006"/><text x="530" y="325" fill="#fbbf24">medium</text>
+    <text x="572" y="325" fill="#a1a1aa">token_program is a fixed PDA</text><text x="814" y="325" fill="#71717a" text-anchor="end">owner</text>
+  </g>
+
+  <!-- lessons back to the sources -->
+  <path class="wire lesson" d="M634 332 L 634 352 L 110 352 L 110 286" stroke="#52525b"/>
+  <circle class="pulse back" cx="634" cy="352" r="3" fill="#fbbf24"/>
+  <text x="372" y="347" class="mono caps" text-anchor="middle">LESSONS · corrections read before the next audit</text>
+  <text x="440" y="372" class="mono d" text-anchor="middle" font-size="9.5">every finding, one shape · pinned · filtered by who can reach it · re-rated with reasons · never lost</text>
+</svg>
