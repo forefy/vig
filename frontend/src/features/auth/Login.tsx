@@ -56,13 +56,14 @@ export function Login() {
   )
 }
 
-// Seeded users, dev server only. `import.meta.env.DEV` is compiled away in
+// The admin, dev server only: one login locally; other users are made from
+// the admin's Users page and entered from there. `import.meta.env.DEV` is compiled away in
 // the production bundle, and the backend answers 404 outside VIG_ENV=dev.
 function DevLogins({ next }: { next: string }) {
   return (
     <div className="flex items-center gap-3 rounded-md border border-dashed border-border px-3 py-1.5">
       <span className="label-caps">dev</span>
-      {['admin', 'pro', 'free'].map((u) => (
+      {['admin'].map((u) => (
         <a key={u} href={`${apiBase}/v1/auth/dev/login?user=${u}&next=${encodeURIComponent(next)}`} className="font-mono text-xs text-muted-foreground hover:text-foreground">
           {u}
         </a>

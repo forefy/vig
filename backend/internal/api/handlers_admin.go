@@ -175,6 +175,7 @@ func (d *Deps) registerAdmin(api huma.API) {
 	huma.Register(api, withAuth(op("adminGrantCredits", http.MethodPost, "/v1/admin/credits/grant", "Grant credits", "admin"), adminAuth), d.adminGrantCredits)
 	huma.Register(api, withAuth(op("adminRevokeCredits", http.MethodPost, "/v1/admin/credits/revoke", "Revoke credits", "admin"), adminAuth), d.adminRevokeCredits)
 	huma.Register(api, withAuth(op("adminListUsers", http.MethodGet, "/v1/admin/users", "Users", "admin"), adminAuth), d.adminListUsers)
+	huma.Register(api, withAuth(op("adminCreateUser", http.MethodPost, "/v1/admin/users", "Create a user by hand: a concierge customer with no sign-in yet, or a second account to work a flow locally; optional starting credits and a pro plan", "admin"), adminAuth), d.adminCreateUser)
 	huma.Register(api, withAuth(op("adminGetUser", http.MethodGet, "/v1/admin/users/{id}", "User with identities, plan, ledger and audits", "admin"), adminAuth), d.adminGetUser)
 	huma.Register(api, withAuth(op("adminCreateOperatorToken", http.MethodPost, "/v1/admin/operator-tokens", "Mint a job-scoped operator token", "admin"), adminAuth), d.adminCreateOperatorToken)
 	huma.Register(api, withAuth(op("adminListActions", http.MethodGet, "/v1/admin/actions", "Admin action log", "admin"), adminAuth), d.adminListActions)
@@ -691,6 +692,42 @@ func (d *Deps) adminUser(ctx context.Context, u store.User) (AdminUser, error) {
 		out.Plan = toPlanState(plan, d.now())
 	}
 	return out, nil
+}
+
+type adminCreateUserIn struct {
+	Body struct {
+		DisplayName string `json:"display_name" minLength:"2" maxLength:"60"`
+		Credits     int    `json:"credits,omitempty" minimum:"0" maximum:"100" doc:"Starting credits, granted on the ledger with the admin's name"`
+		Plan        string `json:"plan,omitempty" enum:"pro" doc:"pro starts a year of one run a day"`
+	}
+}
+
+// adminCreateUser makes a user with no identity. It signs in through an
+// identity linked later, or, in dev, through the dev login by its id.
+func (d *Deps) adminCreateUser(ctx context.Context, in *adminCreateUserIn) (*body[AdminUser], error) {
+	u, err := d.Store.CreateUser(ctx, d.Store.Pool, strings.TrimSpace(in.Body.DisplayName), "")
+	if err != nil {
+		return nil, fail(err)
+	}
+	if in.Body.Credits > 0 {
+		if _, _, err := d.Store.AdminCredit(ctx, principal(ctx).UserID, u.ID, core.LedgerGrant, in.Body.Credits, "starting credits"); err != nil {
+			return nil, fail(err)
+		}
+	}
+	if in.Body.Plan == "pro" {
+		now := d.now()
+		if _, err := d.Store.CreatePlan(ctx, d.Store.Pool, store.Plan{UserID: u.ID, Kind: "pro", StartsAt: now.Add(-time.Minute), EndsAt: now.Add(365 * 24 * time.Hour), RunCap: 1}); err != nil {
+			return nil, fail(err)
+		}
+	}
+	if _, err := d.logAdmin(ctx, "user.create", "user", u.ID, map[string]any{"display_name": u.DisplayName, "credits": in.Body.Credits, "plan": in.Body.Plan}); err != nil {
+		return nil, fail(err)
+	}
+	out, err := d.adminUser(ctx, u)
+	if err != nil {
+		return nil, fail(err)
+	}
+	return &body[AdminUser]{Body: out}, nil
 }
 
 func (d *Deps) adminListUsers(ctx context.Context, _ *struct{}) (*body[list[AdminUser]], error) {

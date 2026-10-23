@@ -229,6 +229,53 @@ export function AdminClaims() {
 }
 
 // Grant or revoke credits for one user, with the reason the ledger keeps.
+// A user made by hand: a name, starting credits, a pro plan or not. No
+// identity; it signs in once one is linked, or through the dev login.
+function NewUserDialog({ onDone }: { onDone: () => void }) {
+  const [open, setOpen] = useState(false)
+  const [name, setName] = useState('')
+  const [credits, setCredits] = useState('3')
+  const [pro, setPro] = useState(false)
+  const { busy, run } = useBusy()
+  const n = Number(credits)
+  const valid = name.trim().length >= 2 && Number.isInteger(n) && n >= 0 && n <= 100
+  return (
+    <>
+      <Button size="sm" variant="outline" onClick={() => setOpen(true)}>New user</Button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogTitle className="label-caps">new user</DialogTitle>
+          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="name" aria-label="Display name" className="h-9" autoFocus />
+          <div className="flex items-center gap-2">
+            <Input value={credits} onChange={(e) => setCredits(e.target.value)} type="number" min={0} max={100} step={1} aria-label="Credits" className="h-9 w-24 font-mono" />
+            <span className="font-mono text-xs text-muted-foreground">cr</span>
+            <button type="button" onClick={() => setPro((p) => !p)} className={cn('ml-auto rounded-sm border px-2 py-0.5 font-mono text-[11px]', pro ? 'border-primary text-foreground' : 'border-border text-muted-foreground hover:text-foreground')}>pro</button>
+          </div>
+          <Button
+            size="sm"
+            className="w-fit"
+            disabled={!valid || busy}
+            onClick={() =>
+              run(async () => {
+                const r = await api.POST('/v1/admin/users', { body: { display_name: name.trim(), credits: n, ...(pro ? { plan: 'pro' as const } : {}) } })
+                if (r.error || !r.data) toast.error(problemDetail(r.error, 'Failed'))
+                else {
+                  toast.success(r.data.user.display_name)
+                  setName('')
+                  setOpen(false)
+                  onDone()
+                }
+              })
+            }
+          >
+            Create
+          </Button>
+        </DialogContent>
+      </Dialog>
+    </>
+  )
+}
+
 function CreditsDialog({ userId, credits, onDone }: { userId: string; credits: number; onDone: () => void }) {
   const [open, setOpen] = useState(false)
   const [delta, setDelta] = useState('1')
@@ -274,6 +321,7 @@ export function AdminUsers() {
   const items = q.data?.items ?? []
   return (
     <Fetched q={q} items={items} empty="No users">
+      <div className="mb-3 flex justify-end"><NewUserDialog onDone={() => void q.refetch()} /></div>
       <div className="overflow-x-auto rounded-md border border-border bg-card">
         <table className="w-full min-w-[640px] text-sm">
           <tbody className="divide-y divide-border">
@@ -288,7 +336,16 @@ export function AdminUsers() {
                 <td className="px-4 py-2.5 text-right text-xs text-muted-foreground">{u.plan?.kind ?? '-'}</td>
                 <td className="num px-4 py-2.5 text-right text-xs">{u.audits} audits</td>
                 <td className="px-4 py-2.5 text-right"><Copy value={u.user.id} className="text-[11px]">{short(u.user.id, 8, 4)}</Copy></td>
-                <td className="px-4 py-2.5 text-right"><CreditsDialog userId={u.user.id} credits={u.credits} onDone={() => void q.refetch()} /></td>
+                <td className="px-4 py-2.5 text-right">
+                  <span className="inline-flex items-center gap-2">
+                    {/* Dev server only: enter the app as this user, through the
+                        dev login the backend serves only with VIG_ENV=dev. */}
+                    {import.meta.env.DEV && (
+                      <a href={`${import.meta.env.VITE_API_URL ?? ''}/v1/auth/dev/login?user=${u.user.id}&next=${encodeURIComponent('/app')}`} className="font-mono text-[11px] text-muted-foreground hover:text-foreground">sign in as</a>
+                    )}
+                    <CreditsDialog userId={u.user.id} credits={u.credits} onDone={() => void q.refetch()} />
+                  </span>
+                </td>
               </tr>
             ))}
           </tbody>

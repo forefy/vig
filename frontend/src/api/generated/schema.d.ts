@@ -542,7 +542,8 @@ export interface paths {
         /** Users */
         get: operations["adminListUsers"];
         put?: never;
-        post?: never;
+        /** Create a user by hand: a concierge customer with no sign-in yet, or a second account to work a flow locally; optional starting credits and a pro plan */
+        post: operations["adminCreateUser"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1886,6 +1887,25 @@ export interface components {
             hide: boolean;
             reason: string;
         };
+        AdminCreateUserInBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/AdminCreateUserInBody.json
+             */
+            readonly $schema?: string;
+            /**
+             * Format: int64
+             * @description Starting credits, granted on the ledger with the admin's name
+             */
+            credits?: number;
+            display_name: string;
+            /**
+             * @description pro starts a year of one run a day
+             * @enum {string}
+             */
+            plan?: "pro";
+        };
         AdminDelayInBody: {
             /**
              * Format: uri
@@ -1952,6 +1972,12 @@ export interface components {
             state: "queued" | "claimed" | "cloning" | "programs_verified" | "analysis" | "human_review" | "delivered" | "failed" | "cancelled";
         };
         AdminUser: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/AdminUser.json
+             */
+            readonly $schema?: string;
             /** Format: int64 */
             audits: number;
             /** Format: int64 */
@@ -5134,6 +5160,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ListAdminUser"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    adminCreateUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminCreateUserInBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminUser"];
                 };
             };
             /** @description Error */

@@ -542,7 +542,9 @@ export function ReportBody({ report, onStatus, onSeverity, surfaceHref }: { repo
       <aside className="hidden lg:block lg:sticky lg:top-8 lg:self-start">
         <nav aria-label="Findings">
           <ol className="flex flex-col gap-0.5 border-l border-border">
-            {findings.map((f) => (
+            {/* The index reads in the stream's order: severity groups, then
+                ordinals within each, never bare ordinal order. */}
+            {groups.flatMap((g) => g.items).map((f) => (
               <li key={f.id ?? f.ordinal}>
                 <a
                   href={`#f-${f.ordinal}`}

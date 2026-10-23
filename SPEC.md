@@ -428,6 +428,7 @@ GET  /v1/admin/tweet-claims          POST …/{id}/approve | reject | revoke
 POST /v1/admin/credits/grant         user, delta, reason
 POST /v1/admin/credits/revoke
 GET  /v1/admin/users  GET /v1/admin/users/{id}
+POST /v1/admin/users                 display_name, credits, plan → user made by hand (no identity; dev login by id, or an identity linked later)
 POST /v1/admin/operator-tokens
 GET  /v1/admin/actions
 ```

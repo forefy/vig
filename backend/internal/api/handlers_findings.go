@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 
 	"github.com/danielgtaylor/huma/v2"
@@ -91,5 +92,26 @@ func (d *Deps) checkReport(ctx context.Context, auditID, repo, head string, doc 
 	}
 	out.Valid = len(out.Errors) == 0
 	out.Advice = doc.Advise()
+	// On a revision, a finding that matches nothing on the current report
+	// by id or by title and file starts over: its statuses, re-ratings
+	// and archive reasons stay behind. Say so before the post.
+	if cur, err := d.Store.GetReportByAudit(ctx, auditID); err == nil {
+		byID := map[string]bool{}
+		byKey := map[string]bool{}
+		for _, f := range cur.Findings {
+			byID[f.ID] = true
+			byKey[f.Title+"\x00"+f.Location.File] = true
+		}
+		for _, f := range doc.Findings {
+			id := f.CarriedFromID
+			if id == "" {
+				id = f.ID
+			}
+			if byID[id] || byKey[f.Title+"\x00"+f.Location.File] {
+				continue
+			}
+			out.Advice = append(out.Advice, fmt.Sprintf("finding %d: matches nothing on the current report by id or by title and file, so it would start with no history; carry its id (the id field from GET report.json) if it continues an existing finding", f.Ordinal))
+		}
+	}
 	return &body[ReportCheck]{Body: out}, nil
 }

@@ -244,6 +244,10 @@ func (s *Store) ReviseReport(ctx context.Context, auditID string, doc core.Findi
 			return wrap(err)
 		}
 		matched := map[string]bool{}
+		// A kept finding is one that carries its id, or keeps its title and
+		// file. A retitled, relocated finding posted without its id is a
+		// new finding to the system, and its history stays on the version
+		// it was made on; the dry run says so before the post.
 		for _, f := range doc.Findings {
 			status := f.Status
 			p, ok := byID[f.CarriedFromID]

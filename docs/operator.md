@@ -76,6 +76,10 @@ Replay uses `simulateTransaction` with signatures skipped and the blockhash repl
 
 `vig-op claim` prints `lesson` lines before anything else: findings on earlier reports of this repository that the owner or an admin archived as not relevant, or rated up or down, each with the reason in their words. Read them before the code. Do not raise what was archived unless the code changed; rate like the corrections rated. The same list is `job.lessons` in job.json and `GET /v1/admin/lessons` for every repository.
 
+## Revising
+
+A revision continues a finding by its `id` (the one `GET …/report.json` returns), or by the same title and file. A finding posted retitled and relocated without its id starts over: its statuses, re-ratings and archive reasons stay on the version they were made on. The dry run names each finding that would start over before you post.
+
 ## Posting as an agent
 
 An agent that writes the document itself, without the CLI, has three things to lean on:

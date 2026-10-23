@@ -874,3 +874,45 @@ func TestArchiveKeepsReasonAndFeedsLessons(t *testing.T) {
 		t.Fatalf("lessons leaked across repositories: %+v", other)
 	}
 }
+
+func TestRevisionFollowsIDWhenRetitled(t *testing.T) {
+	f := newFixture(t)
+	f.grant(1)
+	a, _, err := f.s.QueueAudit(f.ctx, f.audit("eeee5555", "P1"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, st := range []core.AuditState{core.StateClaimed, core.StateCloning, core.StateProgramsVerified, core.StateAnalysis, core.StateHumanReview} {
+		if _, err := f.s.Advance(f.ctx, a.ID, st, "operator", "", nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	doc := core.FindingsDocument{
+		Report:   core.ReportHeader{AuditID: a.ID, Pin: core.Pin{Repo: f.target.Repo, Commit: "eeee5555", Programs: []core.ProgramPin{{ID: "P1", Slot: 1, BytecodeSHA256: "abc", Match: core.MatchVerified}}}},
+		Findings: []core.Finding{{Ordinal: 1, Severity: core.SeverityCritical, Title: "Oracle in discovery", Location: core.Location{File: "a.py", LineStart: 4}, Description: "d", Fix: "- f", FixKind: core.FixOperational}},
+	}
+	r, err := f.s.StoreReport(f.ctx, a.ID, doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.s.Advance(f.ctx, a.ID, core.StateDelivered, "operator", "", nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.s.SetFindingSeverity(f.ctx, r.ID, r.Findings[0].ID, core.SeverityMedium, "not reachable from outside", "admin", f.user.ID); err != nil {
+		t.Fatal(err)
+	}
+	// Retitled and relocated, but the id rides along: the same finding,
+	// and its history follows.
+	doc.Findings[0].Title = "DNS oracle in discovery"
+	doc.Findings[0].Location.File = "b.py"
+	doc.Findings[0].Severity = core.SeverityMedium
+	doc.Findings[0].CarriedFromID = r.Findings[0].ID
+	rev, err := f.s.ReviseReport(f.ctx, a.ID, doc, f.user.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := rev.Report.Findings[0].SeverityChanges
+	if rev.Kept != 1 || len(h) != 1 || h[0].Reason != "not reachable from outside" {
+		t.Fatalf("kept %d, history %+v", rev.Kept, h)
+	}
+}
