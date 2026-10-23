@@ -50,6 +50,19 @@ func applyFixes(fs []core.Finding, m map[string]recommendation) {
 					end = fs[i].Location.LineStart
 				}
 				fs[i].Fix += fmt.Sprintf("\n```rust %s:%d-%d\n%s\n```", fs[i].Location.File, fs[i].Location.LineStart, end, r.Code)
+				// The fence was placed after capture ran, so its site is
+				// filled here: from the finding's own code when the capture
+				// covered the file, else from the seed's demo code.
+				site := core.FixSite{Location: core.Location{File: fs[i].Location.File, LineStart: fs[i].Location.LineStart, LineEnd: end}}
+				if fs[i].Snippet != nil {
+					c := *fs[i].Snippet
+					c.Fix, c.FixAt = "", 0
+					site.Snippet = &c
+				} else if code, ok := demoCode[fs[i].Location.File]; ok {
+					c := code
+					site.Snippet = &c
+				}
+				fs[i].FixSites = append(fs[i].FixSites, site)
 			} else if fs[i].FixKind == "" {
 				fs[i].FixKind = core.FixOperational
 			}
@@ -88,6 +101,116 @@ func doc(p core.Pin, findings []core.Finding) core.FindingsDocument {
 	return core.FindingsDocument{Report: core.ReportHeader{Pin: p, Summary: core.Summarize(findings)}, Findings: findings}
 }
 
+// demoCode is the code at each demo location, for when the demo repository
+// is not there to check out: a few lines around every located line, in
+// the shape a capture would have had. Original programs, written for the
+// seed; the fixes in vaultFixes patch against them.
+var demoCode = map[string]core.Snippet{
+	"programs/0-signer-authorization/insecure/src/lib.rs": {StartLine: 5, Code: `#[program]
+pub mod signer_authorization {
+    use super::*;
+    pub fn log_message(ctx: Context<LogMessage>) -> ProgramResult {
+        msg!("GM {}", ctx.accounts.authority.key().to_string());
+        Ok(())
+    }
+}
+
+#[derive(Accounts)]
+pub struct LogMessage<'info> {
+    authority: AccountInfo<'info>,
+}`},
+	"programs/2-owner-checks/insecure/src/lib.rs": {StartLine: 8, Code: `pub mod owner_checks {
+    use super::*;
+    pub fn log_message(ctx: Context<LogMessage>) -> ProgramResult {
+        let token = SplTokenAccount::unpack(&ctx.accounts.token.data.borrow())?;
+        if ctx.accounts.authority.key != &token.owner {
+            return Err(ProgramError::InvalidAccountData);
+        }
+        msg!("Your account balance is: {}", token.amount);
+        Ok(())
+    }
+}`},
+	"programs/1-account-data-matching/insecure/src/lib.rs": {StartLine: 8, Code: `pub mod account_data_matching {
+    use super::*;
+    pub fn log_message(ctx: Context<LogMessage>) -> ProgramResult {
+        let token = SplTokenAccount::unpack(&ctx.accounts.token.data.borrow())?;
+        msg!("Your account balance is: {}", token.amount);
+        Ok(())
+    }
+}`},
+	"programs/5-arbitrary-cpi/insecure/src/lib.rs": {StartLine: 6, Code: `pub mod arbitrary_cpi {
+    use super::*;
+    pub fn cpi(ctx: Context<Cpi>, amount: u64) -> ProgramResult {
+        solana_program::program::invoke(
+            &spl_token::instruction::transfer(
+                ctx.accounts.token_program.key,
+                ctx.accounts.source.key,
+                ctx.accounts.destination.key,
+                ctx.accounts.authority.key,
+                &[],
+                amount,
+            )?,
+            &[
+                ctx.accounts.source.clone(),
+                ctx.accounts.destination.clone(),
+                ctx.accounts.authority.clone(),
+            ],
+        )
+    }
+}`},
+	"programs/9-closing-accounts/insecure/src/lib.rs": {StartLine: 6, Code: `pub mod closing_accounts {
+    use super::*;
+    pub fn close(ctx: Context<Close>) -> ProgramResult {
+        let dest_starting_lamports = ctx.accounts.destination.lamports();
+        let account = ctx.accounts.account.to_account_info();
+        **ctx.accounts.destination.lamports.borrow_mut() = dest_starting_lamports
+            .checked_add(account.lamports())
+            .unwrap();
+        **account.lamports.borrow_mut() = 0;
+        Ok(())
+    }
+}`},
+	"programs/3-type-cosplay/insecure/src/lib.rs": {StartLine: 28, Code: `#[derive(BorshSerialize, BorshDeserialize)]
+pub struct User {
+    authority: Pubkey,
+}
+
+#[derive(BorshSerialize, BorshDeserialize)]
+pub struct Metadata {
+    account: Pubkey,
+}`},
+}
+
+// attachDemoCode puts demoCode on every located line the checkout did not
+// cover, and captures fix sites for placed fences the same way.
+func attachDemoCode(fs []core.Finding) {
+	put := func(sn **core.Snippet, file string) {
+		if *sn != nil {
+			return
+		}
+		if code, ok := demoCode[file]; ok {
+			c := code
+			*sn = &c
+		}
+	}
+	for i := range fs {
+		put(&fs[i].Snippet, fs[i].Location.File)
+		for j := range fs[i].Sites {
+			put(&fs[i].Sites[j].Snippet, fs[i].Sites[j].Location.File)
+		}
+		if len(fs[i].FixSites) == 0 {
+			for _, loc := range core.FixLocations(fs[i].Fix) {
+				site := core.FixSite{Location: loc}
+				if code, ok := demoCode[loc.File]; ok {
+					c := code
+					site.Snippet = &c
+				}
+				fs[i].FixSites = append(fs[i].FixSites, site)
+			}
+		}
+	}
+}
+
 // vaultFixes are the recommended lines for the vault findings, taken
 // from the `secure` variant each insecure program ships alongside it. They are
 // attached to code the product captured; only the recommendation is authored.
@@ -113,6 +236,9 @@ func vaultReport(repo, commit, program string) core.FindingsDocument {
 				{Location: core.Location{File: "programs/0-signer-authorization/insecure/src/lib.rs", Package: "0-signer-authorization", LineStart: 9, LineEnd: 9}, Note: "used as if it had signed"},
 			},
 			Description: "The authority account is read but never required to sign. Any caller can pass the vault's authority pubkey and the instruction proceeds as if the authority approved it.",
+			NormalUse:   "The vault's authority calls `log_message` from its own wallet to act on the vault. The runtime proves the call came from that wallet because the wallet signed the transaction.",
+			Expected:    "Nothing in the instruction runs unless the account in the `authority` slot signed the transaction: the signature is the only thing that ties the caller to the vault.",
+			Impact:      "Anyone who knows the authority's public key can act as the authority.\n\n- every instruction that trusts `authority` is open to every wallet on the network\n- no funds have to be staked or risked to try it",
 			ExploitPath: "Build a transaction that passes the real authority pubkey as a non-signer account and calls the instruction; the runtime accepts it because the program never inspects is_signer.",
 			Fix:         "- Declare the account as `Signer<'info>` in the accounts struct, or check `authority.is_signer` before acting on it.",
 			References:  []string{"https://solana.com/developers/courses/program-security/signer-auth"}},
@@ -125,12 +251,17 @@ func vaultReport(repo, commit, program string) core.FindingsDocument {
 				{Location: core.Location{File: "programs/1-account-data-matching/insecure/src/lib.rs", Package: "1-account-data-matching", LineStart: 12, LineEnd: 12}, Note: "account data"},
 			},
 			Description: "The token account is deserialized without checking that its owner is the SPL Token program. A fake account with the same layout passes the checks.",
+			NormalUse:   "A wallet passes its own SPL token account; the program unpacks it and reads the balance and the owner it carries.",
+			Expected:    "Only an account the SPL Token program owns is unpacked as a token account, so the fields read from it were written by the token program and no one else.",
+			Impact:      "A caller can fabricate any balance and any owner the program will believe.\n\n- checks that compare `token.owner` to the signer pass with an attacker-made account",
 			ExploitPath: "Create an account owned by an attacker program with SPL Token layout and the victim's pubkey as authority; pass it in place of the real token account.",
 			Fix:         "- Use `Account<'info, TokenAccount>` so Anchor enforces the owner, or compare `token.owner` with `spl_token::ID` explicitly.",
 			References:  nil},
 		{Severity: core.SeverityMedium, Title: "Arbitrary CPI target", ExploitableBy: core.ExploitableAnyone,
 			Location:    core.Location{File: "programs/5-arbitrary-cpi/insecure/src/lib.rs", Package: "5-arbitrary-cpi", LineStart: 13, LineEnd: 13, ProgramID: program, Instruction: "cpi"},
 			Description: "The program invoked through CPI is taken from the accounts list without validation. A caller can substitute any program with a matching instruction layout.",
+			Expected:    "The CPI only ever reaches the SPL Token program, because the program id in the `token_program` slot is checked before the invoke.",
+			Impact:      "The vault's signer seeds are handed to a program the caller chose.",
 			ExploitPath: "Pass an attacker-controlled program id in the token_program slot; the CPI transfers control to it with the vault's signer seeds.",
 			Fix:         "- Use `Program<'info, Token>` so Anchor checks the program id\n```rust\npub token_program: Program<'info, Token>,\n```\n\n- or assert `token_program.key() == spl_token::ID` before invoking",
 			References:  nil},

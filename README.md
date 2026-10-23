@@ -2,6 +2,17 @@
 
 Security audits of on-chain programs and web applications, sold as credits and delivered as a report the owner can act on.
 
+![A delivered report: the pin, the severity ladder, the changes log and the findings index](docs/screenshots/report.jpg)
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/finding.jpg" alt="A finding read as a chain: normal use, expected, numbered steps with the code and the exploit line marked, impact"><br><sub><b>Every finding is a chain.</b> Normal use, what the code must guarantee, the steps that break it with the lines marked, then who loses what. Status and severity moves stay on the finding with their reasons.</sub></td>
+    <td width="50%"><img src="docs/screenshots/fix.jpg" alt="A fix rendered as a patch: the removed line in red with its number, the added line in green, linked to the pinned commit"><br><sub><b>Fixes are patches.</b> A bullet per change; code that names its place renders as a diff against the pinned commit, linked to the lines.</sub></td>
+  </tr>
+</table>
+
+Everything above is the seeded demo report (`make seed`, then `/r/vault-signer-check`): invented programs, invented findings.
+
 A customer points vig at a repository (Solana or Ethereum) or a live site. The deployed code is pinned and verified against the source, an operator works the audit in a sandbox, and the result is a report where every finding reads as a chain: how the code is normally used, what it must guarantee, the steps that break it with captures and recordings, who loses what. Fixes are bullets with patches against the exact lines. Severities can be re-rated with a reason, and the history stays.
 
 ## What is in the box

@@ -107,10 +107,12 @@ func (sd *Seeder) Run(ctx context.Context) (Result, error) {
 		}
 		root, err := sd.GitHub.Checkout(ctx, repo, commit)
 		if err != nil {
-			slog.Warn("seed: no checkout, findings will carry no code", "repo", repo, "commit", commit, "err", err)
+			slog.Warn("seed: no checkout, findings carry the seed's own demo code", "repo", repo, "commit", commit, "err", err)
+			attachDemoCode(fs)
 			return
 		}
 		github.AttachSnippets(root, fs)
+		attachDemoCode(fs)
 	}
 	res := Result{Users: map[string]string{}, TOTPSecret: TOTPSecret, APIKey: sd.APIKey(), OperatorToken: sd.OperatorToken()}
 	if ident, err := s.FindIdentity(ctx, s.Pool, "github", marker); err == nil {
@@ -386,6 +388,13 @@ func (sd *Seeder) Run(ctx context.Context) (Result, error) {
 	}
 	if _, err := s.SetFindingStatus(ctx, r1.ID, r1.Findings[2].ID, core.FindingAcknowledged, "", "owner", ""); err != nil {
 		return res, err
+	}
+	// The owner re-rated one finding with a reason: the report shows the
+	// move under the finding and in its changes log.
+	if len(r1.Findings) > 2 {
+		if _, err := s.SetFindingSeverity(ctx, r1.ID, r1.Findings[2].ID, core.SeverityLow, "token_program is a fixed PDA in every caller we ship", "owner", pro.ID); err != nil {
+			return res, err
+		}
 	}
 	if err := s.Publish(ctx, r1.ID, PublishedSlug); err != nil {
 		return res, err
