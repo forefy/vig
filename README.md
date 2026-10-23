@@ -12,13 +12,11 @@
 <img alt="GitHub last commit" title="GitHub last commit" src="https://img.shields.io/github/last-commit/forefy/vig">
 <a href="https://github.com/forefy/vig/issues/new"><img alt="Issues" title="Issues" src="https://img.shields.io/github/issues-raw/forefy/vig"></a>
 <img alt="License" title="License" src="https://img.shields.io/github/license/forefy/vig">
-<a href="https://discord.gg/WaVMpBtxdB"><img alt="Forefy Discord" title="Forefy Discord" src="https://img.shields.io/discord/1174395390494257152.svg?logo=discord"></a>
 <a href="https://twitter.com/forefy"><img alt="Forefy Twitter" title="Forefy Twitter" src="https://img.shields.io/twitter/follow/forefy.svg?logo=twitter"></a>
 </p>
 
 <p align="center">
-<a href="https://discord.gg/WaVMpBtxdB" title="Forefy Discord">Discord</a>
-| <a href="https://github.com/forefy/vig/discussions" title="vig Discussions">Discussions</a>
+<a href="https://github.com/forefy/vig/discussions" title="vig Discussions">Discussions</a>
 | <a href="https://github.com/forefy/vig/issues/new" title="vig Feature request">Feature request</a>
 | <a href="SPEC.md" title="vig Spec">Spec</a>
 | <a href="https://twitter.com/messages/compose?recipient_id=1469398978185809922" title="Forefy Twitter DM">Twitter DM</a>
