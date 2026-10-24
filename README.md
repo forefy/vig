@@ -11,7 +11,7 @@
 <img alt="vig GitHub commit activity" title="vig GitHub commit activity" src="https://img.shields.io/github/commit-activity/m/forefy/vig">
 <img alt="GitHub last commit" title="GitHub last commit" src="https://img.shields.io/github/last-commit/forefy/vig">
 <a href="https://github.com/forefy/vig/issues/new"><img alt="Issues" title="Issues" src="https://img.shields.io/github/issues-raw/forefy/vig"></a>
-<img alt="License" title="License" src="https://img.shields.io/github/license/forefy/vig">
+<img alt="License" title="License" src="https://img.shields.io/github/license/forefy/vig?cacheSeconds=3600">
 <a href="https://twitter.com/forefy"><img alt="Forefy Twitter" title="Forefy Twitter" src="https://img.shields.io/twitter/follow/forefy.svg?logo=twitter"></a>
 </p>
 
