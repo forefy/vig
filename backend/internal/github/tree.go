@@ -73,9 +73,11 @@ func AutoSelect(path string) bool {
 
 // BuildTree walks a checkout under an optional subdirectory.
 func BuildTree(root, sub string) (Tree, error) {
+	// The sub path is rooted before it is cleaned, so "../.." cannot climb
+	// out of the checkout: it resolves to the root itself.
 	base := root
 	if sub != "" {
-		base = filepath.Join(root, filepath.Clean(sub))
+		base = filepath.Join(root, filepath.Clean("/"+sub))
 	}
 	t := Tree{Lines: map[string]int{}, Code: map[string]int{}}
 	type entry struct {

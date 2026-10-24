@@ -78,4 +78,4 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
       - name: The image answers
-        run: docker run --rm vig:ci openapi | head -c 200 | grep -q '"openapi"'
+        run: docker run --rm vig:ci openapi > /tmp/openapi.json && head -c 200 /tmp/openapi.json | grep -q '"openapi"'

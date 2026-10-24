@@ -253,9 +253,17 @@ func TestBuildTreeSubdirectory(t *testing.T) {
 	if _, ok := tree.Lines["programs/vault/src/lib.rs"]; ok {
 		t.Fatal("paths must be relative to the sub directory")
 	}
-	// Traversal in sub is neutralised by Clean.
-	if _, err := BuildTree(root, "../../.."); err != nil {
+	// Traversal in sub is neutralised: it resolves to the root itself.
+	whole, err := BuildTree(root, "")
+	if err != nil {
 		t.Fatal(err)
+	}
+	escaped, err := BuildTree(root, "../../..")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if escaped.TotalFiles != whole.TotalFiles {
+		t.Fatalf("../../.. walked %d files, the root has %d", escaped.TotalFiles, whole.TotalFiles)
 	}
 }
 
