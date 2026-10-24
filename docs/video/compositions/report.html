@@ -1,0 +1,312 @@
+<template>
+  <style>
+    @font-face {
+      font-family: "Instrument Sans";
+      font-weight: 400 700;
+      src: url("assets/fonts/InstrumentSans.woff2") format("woff2");
+    }
+    #root {
+      position: absolute;
+      inset: 0;
+      overflow: hidden;
+      background: #0f0f12;
+      font-family: "Instrument Sans", sans-serif;
+      color: #fafafa;
+    }
+    #r-cam {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 2560px;
+      height: 9668px;
+    }
+    #r-cam img,
+    #r-cam .ov {
+      position: absolute;
+      display: block;
+    }
+    .plate {
+      left: 0;
+      top: 0;
+      width: 2560px;
+    }
+    #r-pb,
+    #r-pbf,
+    #r-pbc,
+    .ov,
+    .ov img {
+      opacity: 0;
+    }
+    .ov img {
+      left: 0;
+      top: 0;
+    }
+    #r-chain {
+      left: 192px;
+      top: 1307px;
+      width: 1688px;
+      height: 2086px;
+    }
+    #r-chain img {
+      width: 1688px;
+    }
+    #r-opt,
+    #r-dlg {
+      left: 0;
+      top: 1912px;
+      width: 2560px;
+    }
+    #r-rd {
+      left: 880px;
+      top: 2612px;
+      width: 800px;
+      height: 400px;
+    }
+    #r-rd img {
+      width: 800px;
+    }
+    #r-q {
+      left: 112px;
+      top: 987px;
+      width: 2448px;
+      height: 2000px;
+    }
+    #r-q img {
+      width: 2448px;
+    }
+    #r-cur {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 72px;
+      height: 72px;
+      opacity: 0;
+    }
+    #r-cur svg {
+      position: absolute;
+      left: -12px;
+      top: -6px;
+      width: 72px;
+      height: 72px;
+      filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.6));
+    }
+    #r-ring {
+      position: absolute;
+      left: -14px;
+      top: -14px;
+      width: 28px;
+      height: 28px;
+      border: 3px solid #86efac;
+      border-radius: 50%;
+      opacity: 0;
+    }
+    #r-lessons {
+      position: absolute;
+      left: 1920px;
+      top: -60px;
+      width: 1920px;
+      height: 1350px;
+      display: block;
+    }
+    #r-band {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 920px;
+      height: 160px;
+      background: rgba(15, 15, 18, 0.88);
+      border-top: 1px solid #27272a;
+      opacity: 0;
+    }
+    .q {
+      position: absolute;
+      left: 72px;
+      top: 976px;
+      font-size: 44px;
+      font-weight: 500;
+      letter-spacing: -0.01em;
+      line-height: 1;
+      color: #e4e4e7;
+      white-space: nowrap;
+      opacity: 0;
+    }
+    .q em {
+      font-style: normal;
+      color: #86efac;
+    }
+    #r-big {
+      position: absolute;
+      left: 72px;
+      top: 958px;
+      font-size: 84px;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      line-height: 1;
+      white-space: nowrap;
+    }
+    #r-big .w {
+      display: inline-block;
+      opacity: 0;
+    }
+    #r-big em {
+      font-style: normal;
+      color: #86efac;
+    }
+  </style>
+  <div id="root" data-composition-id="report" data-width="1920" data-height="1080">
+    <div id="r-cam" data-layout-allow-overflow>
+      <img id="r-pa" class="plate" src="assets/shots/a-full.png" alt="" />
+      <img id="r-pb" class="plate" src="assets/shots/b-full.png" alt="" />
+      <img id="r-pbf" class="plate" src="assets/shots/b-filtered.png" alt="" />
+      <img id="r-pbc" class="plate" src="assets/shots/b-changes.png" alt="" />
+      <div id="r-chain" class="ov">
+        <img src="assets/shots/chain-1.png" alt="" /><img src="assets/shots/chain-2.png" alt="" /><img src="assets/shots/chain-3.png" alt="" /><img src="assets/shots/chain-4.png" alt="" />
+      </div>
+      <img id="r-opt" class="ov" src="assets/shots/rr-options.png" alt="" />
+      <img id="r-dlg" class="ov" src="assets/shots/rr-dialog.png" alt="" />
+      <div id="r-rd" class="ov">
+        <img src="assets/shots/rd-00.png" alt="" /><img src="assets/shots/rd-01.png" alt="" /><img src="assets/shots/rd-02.png" alt="" /><img src="assets/shots/rd-03.png" alt="" /><img src="assets/shots/rd-04.png" alt="" /><img src="assets/shots/rd-05.png" alt="" /><img src="assets/shots/rd-06.png" alt="" /><img src="assets/shots/rd-07.png" alt="" /><img src="assets/shots/rd-08.png" alt="" /><img src="assets/shots/rd-09.png" alt="" /><img src="assets/shots/rd-10.png" alt="" /><img src="assets/shots/rd-11.png" alt="" /><img src="assets/shots/rd-12.png" alt="" /><img src="assets/shots/rd-13.png" alt="" /><img src="assets/shots/rd-14.png" alt="" /><img src="assets/shots/rd-15.png" alt="" /><img src="assets/shots/rd-16.png" alt="" /><img src="assets/shots/rd-17.png" alt="" /><img src="assets/shots/rd-18.png" alt="" /><img src="assets/shots/rd-19.png" alt="" /><img src="assets/shots/rd-20.png" alt="" /><img src="assets/shots/rd-21.png" alt="" /><img src="assets/shots/rd-22.png" alt="" /><img src="assets/shots/rd-23.png" alt="" /><img src="assets/shots/rd-24.png" alt="" /><img src="assets/shots/rd-25.png" alt="" /><img src="assets/shots/rd-26.png" alt="" /><img src="assets/shots/rd-27.png" alt="" /><img src="assets/shots/rd-28.png" alt="" /><img src="assets/shots/rd-29.png" alt="" /><img src="assets/shots/rd-30.png" alt="" /><img src="assets/shots/rd-31.png" alt="" /><img src="assets/shots/rd-32.png" alt="" /><img src="assets/shots/rd-33.png" alt="" /><img src="assets/shots/rd-34.png" alt="" /><img src="assets/shots/rd-35.png" alt="" /><img src="assets/shots/rd-36.png" alt="" />
+      </div>
+      <div id="r-q" class="ov">
+        <img src="assets/shots/q-00.png" alt="" /><img src="assets/shots/q-01.png" alt="" /><img src="assets/shots/q-02.png" alt="" /><img src="assets/shots/q-03.png" alt="" /><img src="assets/shots/q-04.png" alt="" /><img src="assets/shots/q-05.png" alt="" /><img src="assets/shots/q-06.png" alt="" />
+      </div>
+      <div id="r-cur">
+        <div id="r-ring"></div>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 2 L4 20 L8.8 15.6 L12 22.4 L15 21 L11.8 14.3 L18 14 Z" fill="#fafafa" stroke="#0f0f12" stroke-width="1.5" stroke-linejoin="round" /></svg>
+      </div>
+    </div>
+    <img id="r-lessons" src="assets/shots/lessons.png" alt="" data-layout-ignore />
+    <div id="r-band" data-layout-ignore></div>
+    <div class="q" id="q-chain">Each finding reads as a <em>chain</em></div>
+    <div class="q" id="q-patch">The fix is a real <em>patch</em></div>
+    <div class="q" id="q-kept">The reason <em>stays</em> on the finding</div>
+    <div class="q" id="q-fold">Fold by who can <em>reach</em> it</div>
+    <div id="r-big"><span class="w"><em>Nothing</em></span> <span class="w">here</span> <span class="w">gets</span> <span class="w">deleted</span></div>
+  </div>
+  <script>
+    (() => {
+      const tl = gsap.timeline({ paused: true });
+      const F = 1 / 30;
+      const OFF = 0.25; // the host starts 0.25 s before the surface scene ends
+      const T = (t) => t + OFF;
+      gsap.set("#r-cam", { transformOrigin: "0 0" });
+      gsap.set("#r-ring", { transformOrigin: "50% 50%" });
+      // Camera: cx, cy in the page's CSS pixels (1280 wide), s = frame px per CSS px; plates are 2x.
+      const view = (cx, cy, s) => ({ x: 960 - cx * s, y: 540 - cy * s, scale: s / 2 });
+      const cam = (t, cx, cy, s, d, ease) => tl.to("#r-cam", { ...view(cx, cy, s), duration: d, ease: ease || "power2.inOut" }, T(t));
+      const show = (sel, t) => tl.fromTo(sel, { opacity: 0 }, { opacity: 1, duration: F, ease: "none" }, T(t));
+      const hide = (sel, t) => tl.fromTo(sel, { opacity: 1 }, { opacity: 0, duration: F, ease: "none" }, T(t));
+      // The cursor lives in plate space (CSS px times 2) so it rides the camera.
+      const cur = (t, cx, cy, d, ease) => tl.to("#r-cur", { x: cx * 2, y: cy * 2, duration: d, ease: ease || "power2.inOut" }, T(t));
+      const curAt = (t, cx, cy) => tl.set("#r-cur", { x: cx * 2, y: cy * 2 }, T(t));
+      const click = (t) => {
+        tl.to("#r-cur", { scale: 0.86, duration: 2 * F, ease: "power2.in", yoyo: true, repeat: 1 }, T(t) - 2 * F);
+        tl.fromTo("#r-ring", { scale: 0.4, opacity: 1 }, { scale: 3.2, opacity: 0, duration: 0.25, ease: "power2.out" }, T(t));
+      };
+      const quiet = (id, at, out) => {
+        tl.fromTo("#r-band", { opacity: 0 }, { opacity: 1, duration: 0.15, ease: "none" }, T(at) - 0.1);
+        tl.fromTo(id, { opacity: 0, filter: "blur(6px)" }, { opacity: 1, filter: "blur(0px)", duration: 0.18, ease: "power2.out" }, T(at));
+        tl.to(id, { opacity: 0, filter: "blur(6px)", duration: 0.18, ease: "power3.in" }, T(out));
+        tl.to("#r-band", { opacity: 0, duration: 0.15, ease: "none" }, T(out) + 0.05);
+      };
+
+      // Header: the report arrives slightly large and settles on the pin and the ladder.
+      tl.fromTo("#r-cam", view(560, 300, 1.9), { ...view(560, 300, 1.6), duration: 0.6, ease: "expo.out" }, 0);
+
+      // Chain: the cursor clicks through finding 01's steps; each state is the captured card.
+      const chain = document.querySelectorAll("#r-chain img");
+      cam(1.6, 520, 960, 2.0, 0.5);
+      curAt(1.6, 1040, 1000);
+      show("#r-cur", 2.1);
+      cur(2.1, 292, 928, 0.5, "power3.out");
+      click(2.65);
+      show("#r-chain", 2.7);
+      show(chain[0], 2.7);
+      quiet("#q-chain", 2.4, 6.0);
+      cur(2.9, 466, 928, 0.4, "power3.out");
+      click(3.35);
+      show(chain[1], 3.4);
+      hide(chain[0], 3.4);
+      cam(3.4, 520, 1040, 2.0, 0.45);
+      cur(3.8, 691, 928, 0.4, "power3.out");
+      click(4.25);
+      show(chain[2], 4.3);
+      hide(chain[1], 4.3);
+      cur(4.7, 849, 928, 0.4, "power3.out");
+      click(5.15);
+      show(chain[3], 5.2);
+      hide(chain[2], 5.2);
+      hide("#r-cur", 5.7);
+
+      // Patch: the fix of finding 01 against the pinned commit.
+      cam(6.2, 520, 1330, 2.0, 0.5);
+      quiet("#q-patch", 6.9, 8.6);
+
+      // Re-rate: finding 02, high to medium, with the reason.
+      cam(8.8, 560, 1640, 1.6, 0.5);
+      hide("#r-chain", 8.95);
+      curAt(8.8, 1260, 1700);
+      show("#r-cur", 9.3);
+      cur(9.3, 711, 1606, 0.6, "power3.out");
+      click(9.95);
+      show("#r-opt", 10.0);
+      cur(10.1, 732, 1634, 0.4, "power3.out");
+      click(10.55);
+      hide("#r-opt", 10.6);
+      show("#r-dlg", 10.6);
+      show("#r-rd", 10.6);
+      cam(10.6, 640, 1420, 2.0, 0.5);
+      const rd = document.querySelectorAll("#r-rd img");
+      show(rd[0], 10.6);
+      for (let i = 1; i < rd.length; i++) {
+        show(rd[i], 11.2 + i * F);
+        hide(rd[i - 1], 11.2 + i * F);
+      }
+      cur(12.5, 510, 1468, 0.4, "power3.out");
+      click(12.95);
+      hide("#r-dlg", 13.0);
+      hide("#r-rd", 13.0);
+      hide("#r-cur", 13.0);
+      show("#r-pb", 13.0);
+      cam(13.0, 560, 1700, 1.6, 0.5);
+      quiet("#q-kept", 13.3, 14.9);
+
+      // Query: fold the report by who can reach each finding.
+      cam(14.6, 500, 720, 2.0, 0.5);
+      curAt(14.6, 1040, 900);
+      show("#r-cur", 15.1);
+      cur(15.1, 300, 553, 0.45, "power3.out");
+      click(15.55);
+      show("#r-q", 15.6);
+      const qs = document.querySelectorAll("#r-q img");
+      show(qs[0], 15.6);
+      for (let i = 1; i < qs.length; i++) {
+        show(qs[i], 15.9 + (i - 1) * 4 * F);
+        hide(qs[i - 1], 15.9 + (i - 1) * 4 * F);
+      }
+      quiet("#q-fold", 15.9, 18.1);
+      hide("#r-q", 16.95);
+      show("#r-pbf", 16.95);
+      hide("#r-cur", 16.95);
+
+      // Payoff: the changes log opens on top; then the lessons.
+      cam(18.2, 560, 420, 1.6, 0.5);
+      curAt(18.2, 900, 1300);
+      show("#r-cur", 18.7);
+      cur(18.7, 140, 475, 0.45, "power3.out");
+      click(19.15);
+      show("#r-pbc", 19.2);
+      hide("#r-cur", 19.25);
+      tl.fromTo("#r-band", { opacity: 0 }, { opacity: 1, duration: 0.15, ease: "none" }, T(19.3));
+      document.querySelectorAll("#r-big .w").forEach((w, i) => tl.fromTo(w, { opacity: 0, filter: "blur(6px)" }, { opacity: 1, filter: "blur(0px)", duration: 0.13, ease: "power2.out" }, T(19.4) + i * 0.067));
+      tl.to("#r-cam", { x: "-=1400", duration: 0.35, ease: "power3.inOut" }, T(20.0));
+      tl.fromTo("#r-lessons", { x: 0 }, { x: -1920, duration: 0.35, ease: "power3.inOut" }, T(20.0));
+      tl.to("#r-big", { opacity: 0, filter: "blur(8px)", duration: 0.2, ease: "power3.in" }, T(20.7));
+      tl.to("#r-band", { opacity: 0, duration: 0.15, ease: "none" }, T(20.75));
+      tl.to("#root", { opacity: 0, filter: "blur(8px)", duration: 0.22, ease: "power3.in" }, T(20.78));
+
+      window.__timelines = window.__timelines || {};
+      window.__timelines["report"] = tl;
+    })();
+  </script>
+</template>

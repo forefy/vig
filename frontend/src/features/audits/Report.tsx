@@ -665,6 +665,21 @@ function facetsOf(findings: Finding[], words: ChainWords): Facet[] {
   // Least to most privileged, so the chips read as a ladder.
   const exploit = ['anyone', 'any_user', 'any_signer', 'account_owner', 'api_key', 'internal_network', 'internal', 'admin', 'upgrade_authority', 'other_program', 'none']
   const short = (p: string) => p.slice(p.lastIndexOf('/') + 1)
+  // A file chip shows the base name. When base names collide across the
+  // report, the nearest directory that differs is shown beside it, so five
+  // lib.rs chips read as five packages rather than one word five times.
+  const files = [...new Set(findings.map((f) => f.location.file).filter(Boolean))]
+  const fileWord = (p: string) => {
+    const base = short(p)
+    const twins = files.filter((o) => o !== p && short(o) === base)
+    if (twins.length === 0) return base
+    const parts = p.split('/')
+    for (let i = parts.length - 2; i >= 0; i--) {
+      const seg = parts[i] ?? ''
+      if (twins.every((o) => o.split('/')[i] !== seg)) return `${seg} · ${base}`
+    }
+    return p
+  }
   return [
     facet('severity', 'severity', (f) => f.severity, (v) => v, order, true),
     facet('status', 'status', (f) => f.status, (v) => v, statuses),
@@ -675,7 +690,7 @@ function facetsOf(findings: Finding[], words: ChainWords): Facet[] {
     // what the reader folds by, with ids folded out of the route.
     facet(words.instruction, words.instruction, (f) => (words.web ? routeOf(f.location.url) : f.location.instruction ?? 'none'), (v) => (words.web ? shortRoute(v) : v)),
     ...(words.web ? [facet('method', 'method', (f) => methodOf(f), (v) => v)] : []),
-    facet('file', 'file', (f) => f.location.file || 'none', (v) => (v === 'none' ? 'no source' : short(v))),
+    facet('file', 'file', (f) => f.location.file || 'none', (v) => (v === 'none' ? 'no source' : fileWord(v))),
     facet(words.program, words.program, (f) => (words.web ? hostOf(f.location.url) : f.location.program_id ?? 'none'), (v) => (words.web || v.length <= 12 ? v : `${v.slice(0, 6)}…${v.slice(-4)}`)),
     facet('sites', 'sites', (f) => ((f.sites ?? []).length > 0 ? 'several' : 'one'), (v) => v, ['one', 'several']),
     facet('exploit path', 'exploit path', (f) => (f.exploit_path || f.exploit_path_withheld ? 'yes' : 'no'), (v) => v, ['yes', 'no']),

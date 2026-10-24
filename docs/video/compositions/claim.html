@@ -1,0 +1,47 @@
+<template>
+  <style>
+    @font-face {
+      font-family: "Instrument Sans";
+      font-weight: 400 700;
+      src: url("assets/fonts/InstrumentSans.woff2") format("woff2");
+    }
+    #root {
+      position: absolute;
+      inset: 0;
+      font-family: "Instrument Sans", sans-serif;
+      color: #fafafa;
+    }
+    #claim-line {
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 494px;
+      text-align: center;
+      font-size: 84px;
+      font-weight: 600;
+      letter-spacing: -0.02em;
+      line-height: 1;
+      white-space: nowrap;
+    }
+    #claim-line .w {
+      display: inline-block;
+      opacity: 0;
+    }
+    #claim-line em {
+      font-style: normal;
+      color: #86efac;
+    }
+  </style>
+  <div data-hf-id="hf-dc55" id="root" data-composition-id="claim" data-width="1920" data-height="1080">
+    <div id="claim-line"><span class="w">Everything</span> <span class="w">lands</span> <span class="w">in</span> <span class="w"><em>one</em></span> <span class="w"><em>report</em></span></div>
+  </div>
+  <script>
+    (() => {
+      const tl = gsap.timeline({ paused: true });
+      document.querySelectorAll("#claim-line .w").forEach((w, i) => tl.fromTo(w, { opacity: 0, filter: "blur(6px)" }, { opacity: 1, filter: "blur(0px)", duration: 0.13, ease: "power2.out" }, 0.15 + i * 0.07));
+      tl.to("#claim-line", { opacity: 0, filter: "blur(8px)", duration: 0.2, ease: "power3.in" }, 1.8);
+      window.__timelines = window.__timelines || {};
+      window.__timelines["claim"] = tl;
+    })();
+  </script>
+</template>

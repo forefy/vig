@@ -1,11 +1,7 @@
 # Reporting Dashboard and Determinism Layer for Security Audit Reports
 
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/hero/hero-dark.svg">
-    <source media="(prefers-color-scheme: light)" srcset="docs/hero/hero-light.svg">
-    <img src="docs/hero/hero-dark.svg" alt="A repository and its deployed bytecode are pinned together, the program's surface lights up under live traffic, a report comes out with a severity ladder and a finding read as a chain, and the owner's corrections flow back as lessons for the next audit" width="880"/>
-  </picture>
+  <img src="docs/hero/vig-feature.gif" alt="Findings come in from an operator, an agent and a fuzzer, get checked at the door and come out in one shape; the program's surface is mapped; the report is read as a chain, its fix is a patch, a severity is re-rated with a reason, the findings fold by who can reach them, and the changes log keeps every correction" width="880"/>
 </p>
 
 <p align="center">
@@ -37,7 +33,22 @@ Findings arrive from many places: an operator in a sandbox, an agent emitting JS
 <img src="docs/screenshots/report.png" alt="A delivered report: the pinned repository and verified build, the severity ladder, the changes log, and the first finding read as a chain with the exploitable line marked" title="A delivered report" width="900"/>
 </p>
 
-The report above is the seeded demo (`make seed`, then `/r/vault-signer-check`): an invented program with invented findings.
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/filters.png" alt="The query line's facets: severity, status, exploitable by, evidence, tool, instruction, file, sites, exploit path, each value with its count"><br><sub><b>Fold the findings by anything they share.</b> One query line, facets drawn from the schema, counts that narrow as you type.</sub></td>
+    <td width="50%"><img src="docs/screenshots/changes.png" alt="The changes log: an archive with its reason, a re-rating from medium to low with its reason, two status moves, each with who and when"><br><sub><b>Every correction, kept.</b> Archives, re-ratings and status moves with their reasons, on the finding and in one log; the counts follow.</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/fix.png" alt="A fix rendered as a patch: the removed line in red with its number, the added line in green, against the pinned commit"><br><sub><b>Fixes are patches.</b> Code that names its place is a diff against those lines at the pinned commit, linked to them.</sub></td>
+    <td><img src="docs/screenshots/archived.png" alt="The archived strip: a finding judged not relevant, with its severity, the reason, who and when"><br><sub><b>Archived, not deleted.</b> A finding judged not relevant leaves the counts and stays on the report with the reason; it is a lesson for the next audit.</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/wizard.png" alt="Start an audit: target cards for a Solana program, an EVM contract and a web app, with the order summary"><br><sub><b>One wizard, many targets.</b> Programs, contracts and live sites are adapters; the steps come from the adapter, the order reads the same.</sub></td>
+    <td><img src="docs/screenshots/dashboard.png" alt="The dashboard: credits, next run, audits in progress and delivered, and the recent audits with their states"><br><sub><b>The dashboard.</b> Credits, the next run, every audit with its state. Facts as badges, never a sentence of help text.</sub></td>
+  </tr>
+</table>
+
+Everything above is the seeded demo (`make seed`, then `/r/vault-signer-check`): an invented program with invented findings.
 
 - [Determinism](#determinism)
 - [The dashboard](#the-dashboard)
@@ -48,6 +59,14 @@ The report above is the seeded demo (`make seed`, then `/r/vault-signer-check`):
 - [What is missing](#what-is-missing)
 
 ## Determinism
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/hero/hero-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="docs/hero/hero-light.svg">
+    <img src="docs/hero/hero-dark.svg" alt="A repository and its deployed bytecode are pinned together, the program's surface lights up under live traffic, a report comes out with a severity ladder and a finding read as a chain, and the owner's corrections flow back as lessons for the next audit" width="880"/>
+  </picture>
+</p>
 
 Two reports of the same code by two different authors should disagree only where the authors disagree, never in shape, in what they point at, or in what counts. vig enforces that at the door.
 

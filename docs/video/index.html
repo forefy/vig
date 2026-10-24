@@ -1,0 +1,76 @@
+<!doctype html>
+<html
+  lang="en"
+  data-composition-variables='[
+    {"id":"color-ground","type":"color","label":"Background","default":"#0f0f12"},
+    {"id":"color-ink","type":"color","label":"Text","default":"#fafafa"},
+    {"id":"color-accent","type":"color","label":"Accent","default":"#86efac"}
+  ]'
+>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      :root {
+        --color-ground: #0f0f12;
+        --color-ink: #fafafa;
+        --color-accent: #86efac;
+      }
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        width: 1920px;
+        height: 1080px;
+        overflow: hidden;
+        background: var(--color-ground);
+      }
+      #root {
+        position: relative;
+        width: 1920px;
+        height: 1080px;
+        overflow: hidden;
+      }
+      #ground {
+        position: absolute;
+        inset: 0;
+        background-color: var(--color-ground);
+        background-image: linear-gradient(#17171b 1px, transparent 1px), linear-gradient(90deg, #17171b 1px, transparent 1px);
+        background-size: 24px 24px;
+      }
+      .clip {
+        position: absolute;
+        inset: 0;
+      }
+      #sink {
+        z-index: 3;
+      }
+      #surface {
+        z-index: 2;
+      }
+      #report {
+        z-index: 1;
+      }
+    </style>
+  </head>
+  <body>
+    <div data-hf-id="hf-da4w" id="root" data-composition-id="main" data-start="0" data-duration="45" data-width="1920" data-height="1080" data-motion-blur="on">
+      <div data-hf-id="hf-yd2p" id="ground" data-layout-ignore></div>
+      <div data-hf-id="hf-1ed2" id="sink" class="clip" data-composition-id="sink" data-composition-src="compositions/sink.html" data-start="0" data-duration="13" data-track-index="4" data-width="1920" data-height="1080" data-beat="hook"></div>
+      <div data-hf-id="hf-af0k" id="surface" class="clip" data-composition-id="surface" data-composition-src="compositions/surface.html" data-start="12.7" data-duration="6.3" data-track-index="3" data-width="1920" data-height="1080" data-beat="surface"></div>
+      <div data-hf-id="hf-m72p" id="report" class="clip" data-composition-id="report" data-composition-src="compositions/report.html" data-start="18.75" data-duration="21.25" data-track-index="2" data-width="1920" data-height="1080" data-beat="report"></div>
+      <div data-hf-id="hf-jw8p" id="claim" class="clip" data-composition-id="claim" data-composition-src="compositions/claim.html" data-start="40" data-duration="2" data-track-index="1" data-width="1920" data-height="1080" data-beat="claim"></div>
+      <div data-hf-id="hf-eo9j" id="end" class="clip" data-composition-id="end" data-composition-src="compositions/end.html" data-start="42" data-duration="3" data-track-index="0" data-width="1920" data-height="1080" data-beat="end"></div>
+    </div>
+    <script>
+      window.__timelines = window.__timelines || {};
+      const tl = gsap.timeline({ paused: true });
+      window.__timelines["main"] = tl;
+      tl.seek(0);
+    </script>
+  </body>
+</html>

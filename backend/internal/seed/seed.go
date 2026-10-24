@@ -396,6 +396,13 @@ func (sd *Seeder) Run(ctx context.Context) (Result, error) {
 			return res, err
 		}
 	}
+	// And archived one as not relevant, with the reason: it leaves the
+	// counts, stays on the report, and is a lesson for the next audit.
+	if len(r1.Findings) > 4 {
+		if _, err := s.SetFindingStatus(ctx, r1.ID, r1.Findings[4].ID, core.FindingArchived, "Metadata is never deserialized from user-supplied data", "owner", pro.ID); err != nil {
+			return res, err
+		}
+	}
 	if err := s.Publish(ctx, r1.ID, PublishedSlug); err != nil {
 		return res, err
 	}
