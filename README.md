@@ -119,7 +119,3 @@ The operator guide is at [docs/operator.md](docs/operator.md). Working on the co
 ## What is missing
 
 Deferred until the product surface is complete, with their UI states already built against the real API shapes: the GitHub App for private repositories, Discord notifications, USDC checkout, production infrastructure and the domain. The decisions log in [docs/decisions.md](docs/decisions.md) says why.
-
-## License
-
-MIT. See [LICENSE](LICENSE).
