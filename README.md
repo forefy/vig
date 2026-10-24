@@ -115,7 +115,3 @@ Everything an author needs to produce a report that passes is in the API:
 - A claimed job carries the lessons from earlier reports on the same repository.
 
 The operator guide is at [docs/operator.md](docs/operator.md). Working on the code: `make gen` regenerates the TypeScript client and CI fails on drift; `make test` and `make lint` run the suites. `CLAUDE.md` is the working contract for anyone, human or agent, changing this repo.
-
-## What is missing
-
-Deferred until the product surface is complete, with their UI states already built against the real API shapes: the GitHub App for private repositories, Discord notifications, USDC checkout, production infrastructure and the domain. The decisions log in [docs/decisions.md](docs/decisions.md) says why.
