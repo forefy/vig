@@ -26,7 +26,7 @@
 
 vig is a reporting dashboard and determinism layer for security audit reports.
 
-Findings arrive from many places: an operator in a sandbox, an agent emitting JSON, a fuzzer's crashes, a bounty programme's triage, the previous audit of the same code. vig is where they all land. On the way in, every finding takes one shape, is pinned to the exact commit and deployed build it describes, and is bound to the evidence that established it. On the way out there is one report, read on one dashboard, with every later correction kept.
+Findings arrive from anywhere, and from the agentic context you send them to vig for a customer-ready report standards. vig then enforces your agent to submit correct data, correct lengths, chained inputs, and report finding formats aggregated from a decade of writing and reviewing reports.
 
 <p align="center">A delivered report</p>
 <p align="center">
