@@ -67,7 +67,7 @@ export function FindingCode({ finding, visualSrc, pin }: { finding: Finding; vis
                 {st.kind === 'code' && flow && <span className={cn('num', i === active ? 'text-bad' : 'text-faint')}>{st.n}</span>}
                 {st.kind === 'code' ? (
                   <>
-                    <span>{st.site.note || st.site.location.url || `${base(st.site.location.file)}:${st.site.location.line_start}`}</span>
+                    <span className="max-w-[22rem] truncate">{st.site.note || st.site.location.url || `${base(st.site.location.file)}:${st.site.location.line_start}`}</span>
                     {st.site.visuals?.[0] && <VisualMark visual={st.site.visuals[0]} className="text-faint" />}
                   </>
                 ) : (
@@ -116,7 +116,7 @@ export function FindingCode({ finding, visualSrc, pin }: { finding: Finding; vis
                 // lines: link straight to it and stop there.
                 if (loc.url) {
                   return (
-                    <a href={loc.url} target="_blank" rel="noreferrer" className="rounded-sm font-mono text-[11.5px] text-muted-foreground underline decoration-border underline-offset-2 hover:text-foreground hover:decoration-foreground">
+                    <a href={loc.url} target="_blank" rel="noreferrer" className="min-w-0 max-w-full break-all rounded-sm font-mono text-[11.5px] text-muted-foreground underline decoration-border underline-offset-2 hover:text-foreground hover:decoration-foreground">
                       {loc.url}
                     </a>
                   )
@@ -124,11 +124,11 @@ export function FindingCode({ finding, visualSrc, pin }: { finding: Finding; vis
                 const gh = pin ? `https://github.com/${pin.repo}/blob/${pin.commit}/${loc.file}#L${loc.line_start}${loc.line_end && loc.line_end !== loc.line_start ? `-L${loc.line_end}` : ''}` : undefined
                 const label = `${loc.file}:${loc.line_start}${loc.line_end && loc.line_end !== loc.line_start ? `-${loc.line_end}` : ''}`
                 return gh ? (
-                  <a href={gh} target="_blank" rel="noreferrer" className="rounded-sm font-mono text-[11.5px] text-muted-foreground underline decoration-border underline-offset-2 hover:text-foreground hover:decoration-foreground">
+                  <a href={gh} target="_blank" rel="noreferrer" className="min-w-0 max-w-full break-all rounded-sm font-mono text-[11.5px] text-muted-foreground underline decoration-border underline-offset-2 hover:text-foreground hover:decoration-foreground">
                     {label}
                   </a>
                 ) : (
-                  <Copy value={`${loc.file}:${loc.line_start}`} className="text-[11.5px]">{label}</Copy>
+                  <Copy value={`${loc.file}:${loc.line_start}`} className="min-w-0 max-w-full break-all text-left text-[11.5px]">{label}</Copy>
                 )
               })()}
             </div>

@@ -1,5 +1,5 @@
 import { NavLink, Outlet, Link } from 'react-router'
-import { LayoutGrid, ListChecks, Settings, ShieldCheck, LogOut } from 'lucide-react'
+import { LayoutGrid, ListChecks, Radar, Settings, ShieldCheck, LogOut } from 'lucide-react'
 import { Mark } from '@/components/primitives'
 import { useMe } from '@/features/auth/useMe'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -14,6 +14,7 @@ import { ViewingAs } from './ViewingAs'
 const nav = [
   { to: '/app', label: 'Dashboard', icon: LayoutGrid, end: true },
   { to: '/app/audits', label: 'Audits', icon: ListChecks },
+  { to: '/app/surface', label: 'Surface', icon: Radar },
   { to: '/app/settings', label: 'Settings', icon: Settings },
 ]
 

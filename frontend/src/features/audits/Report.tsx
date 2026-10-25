@@ -19,6 +19,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { cn } from '@/lib/utils'
 import { chainWords } from '@/lib/chain'
 import type { ChainWords } from '@/lib/chain'
+import { QueryLine, countFacet, matches, parseQuery, formatQuery } from '@/components/primitives/query'
+import type { Facet as FacetOf, Query } from '@/components/primitives/query'
 import { toast } from 'sonner'
 import type { components } from '@/api/client'
 
@@ -290,7 +292,7 @@ export function ReportBody({ report, onStatus, onSeverity, surfaceHref }: { repo
   }
   const facets = facetsOf(all, words)
   const archived = all.filter((f) => f.status === 'archived')
-  const findings = all.filter((f) => f.status !== 'archived' && matches(f, facets, query))
+  const findings = all.filter((f) => f.status !== 'archived' && matches(f, facets, query, findingText))
   const groups = order.map((s) => ({ s, items: findings.filter((f) => f.severity === s) })).filter((g) => g.items.length)
   // Every correction on this report, newest first: what moved, why, who.
   const changes = all
@@ -359,7 +361,7 @@ export function ReportBody({ report, onStatus, onSeverity, surfaceHref }: { repo
             </ol>
           </details>
         )}
-        {all.length > 0 && <QueryLine facets={facets} all={all} query={query} onChange={setQuery} shown={findings.length} total={all.length} />}
+        {all.length > 0 && <QueryLine facets={facets} all={all} query={query} onChange={setQuery} shown={findings.length} total={all.length} textOf={findingText} />}
         {findings.length === 0 && all.length > 0 && (
           <div className="flex items-center justify-center rounded-md border border-dashed border-border px-6 py-14">
             <StateBadge state="neutral">0 of {all.length} shown</StateBadge>
@@ -648,19 +650,10 @@ async function downloadJSON(id: string, repo: string) {
 // A facet is one enum of the findings schema, with the values these
 // findings actually carry. Hiding a value removes its findings from the
 // page; the set of hidden values lives in the URL so a view can be shared.
-type Facet = { key: string; label: string; values: { value: string; word: string; n: number }[]; valueOf: (f: Finding) => string; ranked?: readonly string[] }
+type Facet = FacetOf<Finding>
 
 function facetsOf(findings: Finding[], words: ChainWords): Facet[] {
-  const count = (get: (f: Finding) => string) => {
-    const m = new Map<string, number>()
-    for (const f of findings) m.set(get(f), (m.get(get(f)) ?? 0) + 1)
-    return m
-  }
-  const facet = (key: string, label: string, get: (f: Finding) => string, word: (v: string) => string, orderOf?: readonly string[], ranked = false): Facet => {
-    const m = count(get)
-    const keys = orderOf ? orderOf.filter((k) => m.has(k)) : [...m.keys()].sort()
-    return { key, label, valueOf: get, values: keys.map((v) => ({ value: v, word: word(v), n: m.get(v) ?? 0 })), ranked: ranked ? orderOf : undefined }
-  }
+  const facet = (key: string, label: string, get: (f: Finding) => string, word: (v: string) => string, orderOf?: readonly string[], ranked = false): Facet => countFacet(findings, key, label, get, word, orderOf, ranked)
   const statuses = ['open', 'acknowledged', 'fixed', 'disputed'] as const
   // Least to most privileged, so the chips read as a ladder.
   const exploit = ['anyone', 'any_user', 'any_signer', 'account_owner', 'api_key', 'internal_network', 'internal', 'admin', 'upgrade_authority', 'other_program', 'none']
@@ -697,6 +690,8 @@ function facetsOf(findings: Finding[], words: ChainWords): Facet[] {
   ].filter((g) => g.values.length > 1)
 }
 
+const findingText = (f: Finding) => `${f.title} ${f.description}`
+
 function methodOf(f: Finding): string {
   const text = `${f.location.instruction ?? ''} ${f.sites?.[0]?.note ?? ''}`
   const m = /\b(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)\b/i.exec(text)
@@ -706,253 +701,3 @@ function methodOf(f: Finding): string {
 // A clause is one comparison against a facet, or a text match on the
 // finding's words. Clauses are joined left to right by and / or, where
 // and binds tighter: "a and b or c" reads as (a and b) or c.
-type Clause = { facet: string; op: Op; value: string }
-type Op = '=' | '≠' | '~' | '≥' | '≤'
-const opOf: Record<string, Op> = { '!=': '≠', '~': '~', '>=': '≥', '<=': '≤', '=': '=' }
-const opText: Record<Op, string> = { '=': '=', '≠': '!=', '~': '~', '≥': '>=', '≤': '<=' }
-type Conn = 'and' | 'or'
-type Query = { items: Clause[]; conns: Conn[] }
-
-function parseQuery(q: string): Query {
-  const items: Clause[] = []
-  const conns: Conn[] = []
-  for (const orPart of q.split('|')) {
-    const andParts = orPart.split(',').filter(Boolean)
-    andParts.forEach((part, k) => {
-      const m = /^([a-z ]+?)(!=|>=|<=|~|=)(.+)$/.exec(part)
-      if (!m) return
-      if (items.length) conns.push(k === 0 ? 'or' : 'and')
-      items.push({ facet: m[1], op: opOf[m[2]] ?? '=', value: m[3] })
-    })
-  }
-  return { items, conns: conns.slice(0, Math.max(0, items.length - 1)) }
-}
-
-function formatQuery(q: Query): string {
-  return q.items.map((c, i) => `${i ? (q.conns[i - 1] === 'or' ? '|' : ',') : ''}${c.facet}${opText[c.op]}${c.value}`).join('')
-}
-
-function holds(f: Finding, facets: Facet[], c: Clause): boolean {
-  if (c.op === '~') return `${f.title} ${f.description}`.toLowerCase().includes(c.value.toLowerCase())
-  const g = facets.find((x) => x.key === c.facet)
-  if (!g) return true
-  const v = g.valueOf(f)
-  if (c.op === '≥' || c.op === '≤') {
-    // Ranked facets list the top first: at least medium is a rank at or
-    // above medium's, which is an index at or below it.
-    const r = g.ranked ?? []
-    const have = r.indexOf(v)
-    const want = r.indexOf(c.value)
-    if (have < 0 || want < 0) return false
-    return c.op === '≥' ? have <= want : have >= want
-  }
-  return c.op === '=' ? v === c.value : v !== c.value
-}
-
-// Evaluate the query: or splits it into groups, and holds within a group.
-function matches(f: Finding, facets: Facet[], q: Query): boolean {
-  if (q.items.length === 0) return true
-  let anyGroup = false
-  let group = true
-  q.items.forEach((c, i) => {
-    if (i > 0 && q.conns[i - 1] === 'or') {
-      anyGroup = anyGroup || group
-      group = true
-    }
-    group = group && holds(f, facets, c)
-  })
-  return anyGroup || group
-}
-
-// The one-line query builder: clauses as tokens with an and / or between
-// them, then a box whose suggestions are the clauses that would still leave
-// something on the page: values present in the current result (for and) or
-// in the whole report (for or), never a clause that empties it or changes
-// nothing.
-function QueryLine({ facets, all, query, onChange, shown, total }: { facets: Facet[]; all: Finding[]; query: Query; onChange: (next: Query) => void; shown: number; total: number }) {
-  const [text, setText] = useState('')
-  const [open, setOpen] = useState(false)
-  const [cursor, setCursor] = useState(0)
-  // null: not chosen, the line picks and, or or when and has nothing to add.
-  const [nextConn, setNextConn] = useState<Conn | null>(null)
-  const [pickedOp, setPickedOp] = useState<Op>('=')
-  // The box closes a beat after blur so a chip's mousedown lands first; a
-  // refocus or a click cancels that close.
-  const closing = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
-  const show = () => {
-    clearTimeout(closing.current)
-    setOpen(true)
-  }
-  type Option = { facet: string; label: string; op: Clause['op']; value: string; word: string; n: number }
-  // The clauses that would change the page from here: against the
-  // current result for and, the whole report for or.
-  const optionsFor = (conn: Conn): { base: Finding[]; options: Option[] } => {
-    const base = query.items.length === 0 || conn === 'or' ? all : all.filter((f) => matches(f, facets, query))
-    const options = facets.flatMap((g) => {
-      const counts = new Map<string, number>()
-      for (const f of base) counts.set(g.valueOf(f), (counts.get(g.valueOf(f)) ?? 0) + 1)
-      const rank = (x: string) => (g.ranked ?? []).indexOf(x)
-      return g.values.flatMap((v) => {
-        const n = counts.get(v.value) ?? 0
-        const out: Option[] = []
-        if (n > 0 && n < base.length) {
-          out.push({ facet: g.key, label: g.label, op: '=', value: v.value, word: v.word, n }, { facet: g.key, label: g.label, op: '≠', value: v.value, word: v.word, n: base.length - n })
-        }
-        if (g.ranked) {
-          const atLeast = base.filter((f) => rank(g.valueOf(f)) >= 0 && rank(g.valueOf(f)) <= rank(v.value)).length
-          const atMost = base.filter((f) => rank(g.valueOf(f)) >= rank(v.value)).length
-          if (atLeast > 0 && atLeast < base.length) out.push({ facet: g.key, label: g.label, op: '≥', value: v.value, word: v.word, n: atLeast })
-          if (atMost > 0 && atMost < base.length) out.push({ facet: g.key, label: g.label, op: '≤', value: v.value, word: v.word, n: atMost })
-        }
-        return out
-      })
-    })
-    return { base, options }
-  }
-  // When and can narrow no further (one finding left), or is the only
-  // clause worth offering, so the line switches to it.
-  let conn: Conn = nextConn ?? 'and'
-  let { base, options } = optionsFor(conn)
-  if (nextConn === null && query.items.length > 0 && options.length === 0) {
-    const alt = optionsFor('or')
-    if (alt.options.length > 0) {
-      conn = 'or'
-      base = alt.base
-      options = alt.options
-    }
-  }
-  const needle = text.trim().toLowerCase()
-  // Typed words narrow the same palette, in any order: "can" keeps
-  // canFill and cancelOrder; a leading "not" or "!" turns the chips
-  // into not-equals. The words search a chip's facet, value and word.
-  let words = needle.split(/\s+/).filter(Boolean)
-  // A typed operator word wins over the strip: "not", ">=" / "at least" / "min", "<=" / "at most" / "max".
-  const typedOp: Op | null = words.length === 0 ? null : /^(not|!|!=)$/.test(words[0]) ? '≠' : /^(>=|≥|min|least)$/.test(words[0]) ? '≥' : /^(<=|≤|max|most)$/.test(words[0]) ? '≤' : null
-  if (typedOp) words = words.slice(1)
-  if (words[0] === 'at' && (words[1] === 'least' || words[1] === 'most')) words = words.slice(1)
-  const op: Op = typedOp ?? pickedOp
-  const mentions = (hay: string) => words.every((w) => hay.includes(w))
-  const has = (o: Option) => query.items.some((c) => c.facet === o.facet && c.op === o.op && c.value === o.value)
-  let suggestions: Option[] = options
-    .filter((o) => o.op === op && !has(o))
-    .filter((o) => mentions(`${o.label} ${o.word} ${o.value}`.toLowerCase()))
-  if (needle && op === '=' && !/^(and|or)$/.test(needle)) {
-    const n = base.filter((f) => `${f.title} ${f.description}`.toLowerCase().includes(needle)).length
-    if (n > 0 && n < base.length) suggestions = [...suggestions, { facet: 'title', label: 'title', op: '~', value: text.trim(), word: `"${text.trim()}"`, n }]
-  }
-  const add = (o: Option, op: Op = o.op) => {
-    onChange({ items: [...query.items, { facet: o.facet, op, value: o.value }], conns: query.items.length ? [...query.conns, conn] : [] })
-    setText('')
-    setCursor(0)
-    setOpen(false)
-    setNextConn(null)
-    setPickedOp('=')
-  }
-  const remove = (i: number) => {
-    const items = query.items.filter((_, j) => j !== i)
-    const conns = [...query.conns]
-    conns.splice(Math.max(0, i - 1), 1)
-    onChange({ items, conns: conns.slice(0, Math.max(0, items.length - 1)) })
-  }
-  const flip = (i: number) => onChange({ ...query, conns: query.conns.map((c, j) => (j === i ? (c === 'and' ? 'or' : 'and') : c)) })
-  const wordOf = (c: Clause) => {
-    const g = facets.find((x) => x.key === c.facet)
-    return { label: g?.label ?? c.facet, word: c.op === '~' ? `"${c.value}"` : (g?.values.find((v) => v.value === c.value)?.word ?? c.value) }
-  }
-  const connButton = (conn: Conn, onClick: () => void, key: string) => (
-    <button key={key} type="button" onClick={onClick} className={cn('h-6 rounded-sm border px-1.5 font-mono text-[10.5px] uppercase tracking-wide', conn === 'or' ? 'border-warn/50 text-warn' : 'border-border text-faint hover:text-foreground')}>{conn}</button>
-  )
-  return (
-    <div className="relative">
-      <div className="flex min-h-10 flex-wrap items-center gap-1.5 rounded-md border border-border bg-card/50 px-2.5 py-1.5 focus-within:border-primary">
-        {query.items.map((c, i) => {
-          const w = wordOf(c)
-          return [
-            i > 0 ? connButton(query.conns[i - 1], () => flip(i - 1), `conn-${i}`) : null,
-            <span key={`${c.facet}${c.op}${c.value}${i}`} className="inline-flex h-6 items-center gap-1 rounded-sm border border-primary/50 bg-background px-1.5 font-mono text-[11px]">
-              <span className="text-faint">{w.label}</span>
-              <span className={c.op === '≠' ? 'text-warn' : 'text-primary'}>{c.op}</span>
-              <span className="text-foreground">{w.word}</span>
-              <button type="button" aria-label={`Remove ${w.label} ${c.op} ${w.word}`} onClick={() => remove(i)} className="ml-0.5 text-faint hover:text-foreground">×</button>
-            </span>,
-          ]
-        })}
-        {query.items.length > 0 && connButton(conn, () => setNextConn(conn === 'and' ? 'or' : 'and'), 'conn-next')}
-        <input
-          value={text}
-          onChange={(e) => {
-            const v = e.target.value
-            if (query.items.length && /^(and|or) $/i.test(v)) { setNextConn(v.trim().toLowerCase() as Conn); setText(''); setOpen(true); return }
-            setText(v); setOpen(true); setCursor(0)
-          }}
-          onFocus={show}
-          onClick={show}
-          onBlur={() => { closing.current = setTimeout(() => setOpen(false), 120) }}
-          onKeyDown={(e) => {
-            if (e.key === 'ArrowDown') { e.preventDefault(); setCursor((c) => Math.min(c + 1, suggestions.length - 1)); setOpen(true) }
-            else if (e.key === 'ArrowUp') { e.preventDefault(); setCursor((c) => Math.max(c - 1, 0)) }
-            else if (e.key === 'Enter' && suggestions[cursor]) { e.preventDefault(); add(suggestions[cursor]) }
-            else if (e.key === 'Escape') setOpen(false)
-            else if (e.key === 'Backspace' && text === '' && query.items.length) remove(query.items.length - 1)
-          }}
-          placeholder={query.items.length ? '' : 'severity = medium'}
-          aria-label="Filter findings"
-          className="h-6 min-w-[12rem] flex-1 bg-transparent font-mono text-[12px] outline-none placeholder:text-faint"
-        />
-        <StateBadge state={shown === total ? 'neutral' : 'warn'} className="ml-auto h-5 px-1.5 text-[10.5px]">{shown} of {total}</StateBadge>
-      </div>
-      {open && (
-        <div role="listbox" className="absolute left-0 z-20 mt-1 flex w-full max-w-[36rem] flex-col gap-0.5 rounded-md border border-border bg-card p-1.5 shadow-md">
-          <div className="mb-1 flex items-center gap-1 px-1">
-            {(['=', '≠', '≥', '≤'] as const).map((o) => {
-              const usable = options.some((x) => x.op === o && !has(x))
-              return (
-                <button
-                  key={o}
-                  type="button"
-                  disabled={!usable}
-                  aria-pressed={op === o}
-                  onMouseDown={(e) => { e.preventDefault(); setPickedOp(o); setCursor(0) }}
-                  className={cn('h-6 min-w-7 rounded-sm border px-1.5 font-mono text-[12px]', op === o ? (o === '≠' ? 'border-warn text-warn' : 'border-primary text-primary') : 'border-border text-muted-foreground hover:text-foreground', !usable && 'opacity-30')}
-                >
-                  {o}
-                </button>
-              )
-            })}
-          </div>
-          {suggestions.length === 0 && <StateBadge state="pending" className="h-5 w-fit px-1.5 text-[10.5px]">{needle ? `no clause and no finding matches "${text.trim()}"` : query.items.length > 0 && options.length === 0 ? `nothing ${conn} can change` : `nothing to ${op}`}</StateBadge>}
-          {[...facets.map((g) => ({ key: g.key, label: g.label })), { key: 'title', label: 'title' }].map((g) => {
-            const row = suggestions.filter((o) => o.facet === g.key)
-            if (row.length === 0) return null
-            return (
-              <div key={g.key} className="grid grid-cols-[6.5rem_minmax(0,1fr)] items-baseline gap-2 px-1 py-0.5 sm:grid-cols-[7.5rem_minmax(0,1fr)]">
-                <span className="truncate font-mono text-[11px] text-faint">{g.label}</span>
-                <div className="flex flex-wrap gap-1">
-                  {row.map((o) => {
-                    const i = suggestions.indexOf(o)
-                    return (
-                      <button
-                        key={`${o.op}${o.value}`}
-                        type="button"
-                        role="option"
-                        aria-selected={i === cursor}
-                        title={`${g.label} ${o.op} ${o.word}`}
-                        onMouseDown={(e) => { e.preventDefault(); add(o) }}
-                        onMouseEnter={() => setCursor(i)}
-                        className={cn('inline-flex h-6 items-center gap-1 rounded-sm border px-1.5 font-mono text-[11px]', i === cursor ? 'border-primary bg-accent text-foreground' : 'border-border text-muted-foreground hover:text-foreground')}
-                      >
-                        {o.op !== '=' && <span className={o.op === '≠' ? 'text-warn' : 'text-primary'}>{o.op}</span>}
-                        <span>{o.word}</span>
-                        <span className="num text-[10px] text-faint">{o.n}</span>
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      )}
-    </div>
-  )
-}

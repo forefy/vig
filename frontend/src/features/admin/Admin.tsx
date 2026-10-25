@@ -27,6 +27,7 @@ const tabs = [
   { to: '/admin/users', label: 'Users' },
   { to: '/admin/actions', label: 'Actions' },
   { to: '/admin/lessons', label: 'Lessons' },
+  { to: '/admin/surface', label: 'Surface' },
 ]
 
 // Board archetype for operators. Every action here becomes a visible event.

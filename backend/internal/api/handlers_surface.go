@@ -71,6 +71,8 @@ const (
 )
 
 func (d *Deps) registerSurface(api huma.API) {
+	huma.Register(api, withAuth(op("getSurfaceIndex", http.MethodGet, "/v1/surface", "Every node across the user's maps, with its audit, attention and findings", "audits"), userAuth), d.getSurfaceIndex)
+	huma.Register(api, withAuth(op("adminGetSurfaceIndex", http.MethodGet, "/v1/admin/surface", "Every node across every audit's map", "admin"), adminAuth), d.adminGetSurfaceIndex)
 	huma.Register(api, withAuth(op("getAuditSurface", http.MethodGet, "/v1/audits/{id}/surface", "Surface map with attention", "audits"), userAuth), d.getAuditSurface)
 	huma.Register(api, withAuth(op("adminGetAuditSurface", http.MethodGet, "/v1/admin/audits/{id}/surface", "Any audit's surface map", "admin"), adminAuth), d.adminGetAuditSurface)
 	huma.Register(api, withAuth(op("getJobSurface", http.MethodGet, "/v1/op/jobs/{id}/surface", "The job's surface map", "operator"), operatorAuth), d.getJobSurface)
@@ -99,13 +101,35 @@ func (d *Deps) surfaceView(ctx context.Context, a store.Audit) (SurfaceView, err
 	if state != store.SurfaceReady {
 		return view, nil
 	}
-	doc, err := d.Store.GetSurface(ctx, a.ID)
+	doc, _, evidence, err := d.attendedSurface(ctx, a)
 	if err != nil {
 		return SurfaceView{}, err
 	}
+	if wt, err := d.Store.GetWatch(ctx, a.ID); err == nil {
+		view.Watch = string(wt.State)
+	}
+	for i := range view.Programs {
+		view.Programs[i].fromNode(doc, "p:"+view.Programs[i].ID)
+	}
+	if len(evidence) > evidenceReturned {
+		evidence = evidence[:evidenceReturned]
+	}
+	view.Surface = &doc
+	view.Evidence = evidence
+	return view, nil
+}
+
+// attendedSurface reads an audit's map as its page shows it: the stored
+// document, enriched with the report's places for a site, with attention,
+// counts and findings derived from the evidence and the report.
+func (d *Deps) attendedSurface(ctx context.Context, a store.Audit) (core.Surface, []core.Finding, []core.SurfaceEvidence, error) {
+	doc, err := d.Store.GetSurface(ctx, a.ID)
+	if err != nil {
+		return core.Surface{}, nil, nil, err
+	}
 	evidence, err := d.Store.ListSurfaceEvidence(ctx, a.ID, evidenceRead)
 	if err != nil {
-		return SurfaceView{}, err
+		return core.Surface{}, nil, nil, err
 	}
 	var findings []core.Finding
 	if a.ReportID != "" {
@@ -130,18 +154,58 @@ func (d *Deps) surfaceView(ctx context.Context, a store.Audit) (SurfaceView, err
 	if totals, err := d.Store.RollupTotals(ctx, a.ID); err == nil && len(totals) > 0 {
 		doc.AddObserved(totals)
 	}
-	if wt, err := d.Store.GetWatch(ctx, a.ID); err == nil {
-		view.Watch = string(wt.State)
+	return doc, findings, evidence, nil
+}
+
+// surfaceIndex flattens the maps of the given audits into one index. An
+// audit whose map is not ready yet is listed with no nodes.
+func (d *Deps) surfaceIndex(ctx context.Context, audits []store.Audit) (core.SurfaceIndex, error) {
+	out := core.SurfaceIndex{Audits: []core.IndexAudit{}, Nodes: []core.IndexNode{}}
+	for _, a := range audits {
+		state, _, err := d.Store.SurfaceStatus(ctx, a.ID)
+		if err != nil || state != store.SurfaceReady {
+			continue
+		}
+		doc, findings, _, err := d.attendedSurface(ctx, a)
+		if err != nil {
+			return out, err
+		}
+		ia := core.IndexAudit{ID: a.ID, TargetID: a.TargetID, Repo: a.Repo, Adapter: doc.Adapter, State: a.State, HeadSHA: a.HeadSHA, Coverage: a.Coverage, BuiltAt: doc.BuiltAt, Map: doc.Coverage, Nodes: len(doc.Nodes)}
+		if t, err := d.Store.GetTarget(ctx, a.TargetID); err == nil {
+			ia.BaseURL = t.BaseURL
+		}
+		out.Audits = append(out.Audits, ia)
+		out.Nodes = append(out.Nodes, core.IndexNodes(a.ID, doc, findings)...)
 	}
-	for i := range view.Programs {
-		view.Programs[i].fromNode(doc, "p:"+view.Programs[i].ID)
+	return out, nil
+}
+
+func (d *Deps) getSurfaceIndex(ctx context.Context, _ *struct{}) (*body[core.SurfaceIndex], error) {
+	u, err := d.user(ctx)
+	if err != nil {
+		return nil, err
 	}
-	if len(evidence) > evidenceReturned {
-		evidence = evidence[:evidenceReturned]
+	audits, err := d.Store.ListSurfaceAudits(ctx, u.ID)
+	if err != nil {
+		return nil, fail(err)
 	}
-	view.Surface = &doc
-	view.Evidence = evidence
-	return view, nil
+	idx, err := d.surfaceIndex(ctx, audits)
+	if err != nil {
+		return nil, fail(err)
+	}
+	return &body[core.SurfaceIndex]{Body: idx}, nil
+}
+
+func (d *Deps) adminGetSurfaceIndex(ctx context.Context, _ *struct{}) (*body[core.SurfaceIndex], error) {
+	audits, err := d.Store.ListSurfaceAudits(ctx, "")
+	if err != nil {
+		return nil, fail(err)
+	}
+	idx, err := d.surfaceIndex(ctx, audits)
+	if err != nil {
+		return nil, fail(err)
+	}
+	return &body[core.SurfaceIndex]{Body: idx}, nil
 }
 
 // fromNode reads the deployment facts the map carries for this program and

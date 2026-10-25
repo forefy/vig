@@ -464,6 +464,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/admin/surface": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Every node across every audit's map */
+        get: operations["adminGetSurfaceIndex"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/admin/tweet-claims": {
         parameters: {
             query?: never;
@@ -1525,6 +1542,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/surface": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Every node across the user's maps, with its audit, attention and findings */
+        get: operations["getSurfaceIndex"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/targets": {
         parameters: {
             query?: never;
@@ -1838,10 +1872,10 @@ export interface components {
              */
             readonly $schema?: string;
             /**
-             * @description The target's adapter: which chain's words the audit speaks, or webapp for a live website
+             * @description The target's adapter: which chain's words the audit speaks, webapp for a live website, repo for a repository with no chain
              * @enum {string}
              */
-            adapter: "solana" | "ethereum" | "webapp";
+            adapter: "solana" | "ethereum" | "webapp" | "repo";
             base_sha?: string;
             /** @enum {string} */
             cost_kind: "credit" | "slot";
@@ -2018,10 +2052,10 @@ export interface components {
              */
             readonly $schema?: string;
             /**
-             * @description The target's adapter: which chain's words the audit speaks, or webapp for a live website
+             * @description The target's adapter: which chain's words the audit speaks, webapp for a live website, repo for a repository with no chain
              * @enum {string}
              */
-            adapter: "solana" | "ethereum" | "webapp";
+            adapter: "solana" | "ethereum" | "webapp" | "repo";
             base_sha?: string;
             /** @enum {string} */
             cost_kind: "credit" | "slot";
@@ -2558,6 +2592,62 @@ export interface components {
             id: string;
             /** @description The user being viewed */
             user_id: string;
+        };
+        IndexAudit: {
+            /** @enum {string} */
+            adapter: "solana" | "ethereum" | "webapp" | "repo";
+            /** @description For a site, the origin the audit is about */
+            base_url?: string;
+            /** Format: date-time */
+            built_at: string;
+            /** @enum {string} */
+            coverage: "full" | "diff";
+            head_sha: string;
+            id: string;
+            /** @description How much of the map traffic and replays reached */
+            map?: components["schemas"]["SurfaceCoverage"];
+            /** Format: int64 */
+            nodes: number;
+            repo: string;
+            state: string;
+            target_id: string;
+        };
+        IndexFinding: {
+            /** Format: int64 */
+            ordinal: number;
+            /** @enum {string} */
+            severity: "critical" | "high" | "medium" | "low" | "info";
+            /** @enum {string} */
+            status: "open" | "acknowledged" | "fixed" | "disputed" | "archived";
+            title: string;
+        };
+        IndexNode: {
+            /** @enum {string} */
+            attention: "unseen" | "observed" | "reviewed" | "finding";
+            audit_id: string;
+            external?: boolean;
+            facts?: {
+                [key: string]: string;
+            };
+            /** Format: int64 */
+            failed?: number;
+            findings?: components["schemas"]["IndexFinding"][] | null;
+            id: string;
+            /** @description program, instruction, account, host, route, param */
+            kind: string;
+            /** Format: date-time */
+            last_seen?: string;
+            name: string;
+            /** Format: int64 */
+            observed: number;
+            /** Format: int64 */
+            ok?: number;
+            parent?: string;
+            /** Format: int64 */
+            replays?: number;
+            /** Format: int64 */
+            signers?: number;
+            source: string;
         };
         InstallURLBody: {
             /**
@@ -3138,7 +3228,7 @@ export interface components {
              * @description The adapter that read the checkout
              * @enum {string}
              */
-            adapter?: "solana" | "ethereum" | "webapp";
+            adapter?: "solana" | "ethereum" | "webapp" | "repo";
             advisories?: components["schemas"]["Advisory"][] | null;
             /**
              * Format: int64
@@ -3273,7 +3363,7 @@ export interface components {
              */
             readonly $schema?: string;
             /** @enum {string} */
-            adapter?: "solana" | "ethereum" | "webapp";
+            adapter?: "solana" | "ethereum" | "webapp" | "repo";
             audit_id: string;
             /** Format: date-time */
             created_at: string;
@@ -3694,6 +3784,16 @@ export interface components {
             summary?: {
                 [key: string]: unknown;
             };
+        };
+        SurfaceIndex: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/SurfaceIndex.json
+             */
+            readonly $schema?: string;
+            audits: components["schemas"]["IndexAudit"][] | null;
+            nodes: components["schemas"]["IndexNode"][] | null;
         };
         SurfaceNode: {
             /** @enum {string} */
@@ -4193,7 +4293,7 @@ export interface operations {
             query?: {
                 state?: "queued" | "claimed" | "cloning" | "programs_verified" | "analysis" | "human_review" | "delivered" | "delayed" | "failed" | "cancelled";
                 user_id?: string;
-                adapter?: "solana" | "ethereum" | "webapp";
+                adapter?: "solana" | "ethereum" | "webapp" | "repo";
                 /** @description Only hidden or only visible audits; both when absent */
                 hidden?: "true" | "false";
                 /** @description Repository name contains */
@@ -4997,6 +5097,35 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ListAudit"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    adminGetSurfaceIndex: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SurfaceIndex"];
                 };
             };
             /** @description Error */
@@ -7204,6 +7333,35 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Scan"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    getSurfaceIndex: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SurfaceIndex"];
                 };
             };
             /** @description Error */

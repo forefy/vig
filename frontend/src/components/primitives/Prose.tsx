@@ -89,9 +89,9 @@ function Patch({ text, lang, loc, ctx }: { text: string; lang: string; loc: { fi
   return (
     <div className="flex flex-col gap-1">
       {href ? (
-        <a href={href} target="_blank" rel="noreferrer" className="w-fit rounded-sm font-mono text-[11.5px] text-muted-foreground underline decoration-border underline-offset-2 hover:text-foreground hover:decoration-foreground">{label}</a>
+        <a href={href} target="_blank" rel="noreferrer" className="w-fit max-w-full break-all rounded-sm font-mono text-[11.5px] text-muted-foreground underline decoration-border underline-offset-2 hover:text-foreground hover:decoration-foreground">{label}</a>
       ) : (
-        <span className="font-mono text-[11.5px] text-muted-foreground">{label}</span>
+        <span className="max-w-full break-all font-mono text-[11.5px] text-muted-foreground">{label}</span>
       )}
       {covering?.snippet ? (
         <CodeSnippet code={covering.snippet.code} startLine={covering.snippet.start_line} markFrom={loc.start} markTo={end} fix={text} mode={loc.end ? 'replace' : 'insert'} />

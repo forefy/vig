@@ -171,3 +171,13 @@ func (s *Store) SetSurfaceError(ctx context.Context, auditID, msg string) error 
 	_, err := s.Pool.Exec(ctx, `update audits set surface_error=$2 where id=$1`, auditID, msg)
 	return err
 }
+
+// ListSurfaceAudits returns the audits that have a map, newest first; a
+// user id limits them to that owner's, an empty one takes every audit.
+func (s *Store) ListSurfaceAudits(ctx context.Context, userID string) ([]Audit, error) {
+	where := `where a.hidden_at is null and exists (select 1 from audit_surfaces s where s.audit_id=a.id) order by a.created_at desc`
+	if userID != "" {
+		return s.listAudits(ctx, `where a.user_id=$1 and a.hidden_at is null and exists (select 1 from audit_surfaces s where s.audit_id=a.id) order by a.created_at desc`, userID)
+	}
+	return s.listAudits(ctx, where)
+}
