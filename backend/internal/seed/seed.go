@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/forefy/vig/backend/internal/adapter/solana"
+	"github.com/forefy/vig/backend/internal/adapter/webapp"
 	"github.com/forefy/vig/backend/internal/auth"
 	"github.com/forefy/vig/backend/internal/chain"
 	"github.com/forefy/vig/backend/internal/core"
@@ -184,11 +185,11 @@ func (sd *Seeder) Run(ctx context.Context) (Result, error) {
 	}
 
 	// ---- credits: admin grant, tweet approval, mini purchase ----
-	grant, err := s.LogAdminAction(ctx, store.AdminAction{AdminID: admin.ID, Kind: "credits.grant", SubjectKind: "user", SubjectID: pro.ID, Payload: map[string]any{"delta": 7, "reason": "design partner"}})
+	grant, err := s.LogAdminAction(ctx, store.AdminAction{AdminID: admin.ID, Kind: "credits.grant", SubjectKind: "user", SubjectID: pro.ID, Payload: map[string]any{"delta": 8, "reason": "design partner"}})
 	if err != nil {
 		return res, err
 	}
-	if _, err := s.AppendLedgerLocked(ctx, store.LedgerRow{UserID: pro.ID, Kind: core.LedgerGrant, Delta: 7, RefKind: "admin_action", RefID: grant.ID, Reason: "design partner", ActorID: admin.ID}); err != nil {
+	if _, err := s.AppendLedgerLocked(ctx, store.LedgerRow{UserID: pro.ID, Kind: core.LedgerGrant, Delta: 8, RefKind: "admin_action", RefID: grant.ID, Reason: "design partner", ActorID: admin.ID}); err != nil {
 		return res, err
 	}
 	notify := func(userID, kind string, payload map[string]any, read bool) error {
@@ -201,7 +202,7 @@ func (sd *Seeder) Run(ctx context.Context) (Result, error) {
 		}
 		return nil
 	}
-	if err := notify(pro.ID, "credits_granted", map[string]any{"delta": 7, "reason": "design partner"}, true); err != nil {
+	if err := notify(pro.ID, "credits_granted", map[string]any{"delta": 8, "reason": "design partner"}, true); err != nil {
 		return res, err
 	}
 
@@ -438,6 +439,47 @@ func (sd *Seeder) Run(ctx context.Context) (Result, error) {
 		return res, err
 	}
 	if err := notify(pro.ID, "audit_failed", map[string]any{"audit_id": a4.ID, "reason": "build failed"}, true); err != nil {
+		return res, err
+	}
+
+	// ---- the web demo: a site with a source snapshot, delivered ----
+	t5, err := s.CreateTarget(ctx, store.Target{Adapter: webapp.Key, OwnerUserID: pro.ID, SourceKind: "public", Repo: ledgerlyRepo,
+		Selector: "branch", Revision: "main", CommitSHA: fakeSHA("ledgerly"), CommitAuthor: "demo", CommitDate: time.Now().Add(-6 * 24 * time.Hour),
+		BaseURL: ledgerlyApp, Scope: core.SiteScope{Hosts: ledgerlyHosts}})
+	if err != nil {
+		return res, err
+	}
+	aw, err := queue(t5, []string{}, store.Scope{Files: []string{ledgerlyApp + "/", ledgerlyAPI + "/"}, Lines: 0}, "full", "")
+	if err != nil {
+		return res, err
+	}
+	wdoc := ledgerlyReport(t5.CommitSHA)
+	rw, err := deliver(aw, wdoc, 5*24*time.Hour, true)
+	if err != nil {
+		return res, err
+	}
+	// The owner fixed the invoice lookup, acknowledged the login one and
+	// re-rated it down with a reason, and archived the stack trace one.
+	if _, err := s.SetFindingStatus(ctx, rw.ID, rw.Findings[0].ID, core.FindingFixed, "", "owner", ""); err != nil {
+		return res, err
+	}
+	if _, err := s.SetFindingStatus(ctx, rw.ID, rw.Findings[3].ID, core.FindingAcknowledged, "", "owner", ""); err != nil {
+		return res, err
+	}
+	if _, err := s.SetFindingSeverity(ctx, rw.ID, rw.Findings[3].ID, core.SeverityLow, "SSO is enforced for every organisation since March; the password form is staff only", "owner", pro.ID); err != nil {
+		return res, err
+	}
+	if _, err := s.SetFindingStatus(ctx, rw.ID, rw.Findings[4].ID, core.FindingArchived, "NODE_ENV=production masks the stack in the deployed handler", "owner", pro.ID); err != nil {
+		return res, err
+	}
+	if err := s.Publish(ctx, rw.ID, LedgerlySlug); err != nil {
+		return res, err
+	}
+	webSurface, webEvidence := ledgerlySurface(wdoc.Findings, time.Now().UTC())
+	if err := s.SaveSurface(ctx, aw.ID, webSurface); err != nil {
+		return res, err
+	}
+	if _, err := s.AddSurfaceEvidence(ctx, aw.ID, webEvidence); err != nil {
 		return res, err
 	}
 

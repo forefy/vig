@@ -12,9 +12,9 @@ const path = require('path')
 const OUT = path.join(__dirname, '..', 'assets', 'shots')
 const API = 'http://localhost:7112'
 const APP = 'http://localhost:7111'
-const REPORT_AUDIT = process.env.REPORT_AUDIT || '01a16cec-e709-772f-b8ca-cc5742215600'
-const SURFACE_AUDIT = process.env.SURFACE_AUDIT || '01a16cec-ea2f-7680-a042-5809bf7fa1dc'
-const REASON = 'token account is a program-owned PDA'
+const REPORT_AUDIT = process.env.REPORT_AUDIT || '01a17298-28c8-76f1-a67c-3c9729c5afeb'
+const SURFACE_AUDIT = process.env.SURFACE_AUDIT || '01a17298-28c8-76f1-a67c-3c9729c5afeb'
+const REASON = 'role is rewritten from the SSO claim at every login'
 const WORD = 'anyone'
 const boxes = {}
 
@@ -56,7 +56,7 @@ async function login(ctx, user) {
   fs.mkdirSync(OUT, { recursive: true })
   const browser = await chromium.launch()
 
-  // Surface map of the token program, wide.
+  // Surface map of the site, wide.
   {
     const ctx = await browser.newContext({ viewport: { width: 1600, height: 1000 }, deviceScaleFactor: 2, colorScheme: 'dark' })
     const page = await login(ctx, 'pro')
@@ -66,7 +66,7 @@ async function login(ctx, user) {
     boxes.surface = {
       page: await pageSize(page),
       nodes: await page.evaluate(() =>
-        [...document.querySelectorAll('[id^="n-ix"]')].map((el) => {
+        [...document.querySelectorAll('[id^="n-"]')].map((el) => {
           const r = el.getBoundingClientRect()
           return { id: el.id.slice(-24), text: el.textContent.trim().slice(0, 40), x: r.left + window.scrollX, y: r.top + window.scrollY, w: r.width, h: r.height }
         }),
@@ -174,9 +174,10 @@ async function login(ctx, user) {
   await page.screenshot({ path: path.join(OUT, 'b-filtered.png'), fullPage: true })
   boxes.q.filtered = { page: await pageSize(page), nav: await box(page, 'nav[aria-label="Findings"]'), f1: await box(page, '#f-1'), chip: await box(page, 'input[aria-label="Filter findings"]') }
 
-  // The changes log, unfolded, on state B.
+  // The changes log, unfolded, on state B. The page remembers the query,
+  // so the list is still folded here: wait for any finding, not the first.
   await page.goto(reportUrl, { waitUntil: 'networkidle' })
-  await page.waitForSelector('#f-1')
+  await page.waitForSelector('article[id^="f-"]')
   await page.waitForTimeout(500)
   boxes.changes = { summary: await box(page, 'details summary') }
   await page.locator('details summary').first().click()

@@ -18,14 +18,14 @@
       left: 0;
       top: 0;
       width: 3200px;
-      height: 2836px;
+      height: 2714px;
     }
     #s-plate {
       position: absolute;
       left: 0;
       top: 0;
       width: 3200px;
-      height: 2836px;
+      height: 2714px;
       display: block;
     }
     #s-band {
@@ -70,15 +70,15 @@
       gsap.set("#s-cam", { transformOrigin: "0 0" });
       // Camera: cx, cy in the page's CSS pixels (1600 wide), s = frame px per CSS px; the plate is 2x.
       const view = (cx, cy, s) => ({ x: 960 - cx * s, y: 540 - cy * s, scale: s / 2 });
-      tl.fromTo("#s-cam", view(800, 560, 1.32), { ...view(800, 560, 1.2), duration: 0.6, ease: "expo.out" }, 0);
-      tl.to("#s-cam", { ...view(700, 900, 2.0), duration: 0.55, ease: "power2.inOut" }, 1.8);
+      tl.fromTo("#s-cam", view(800, 640, 1.32), { ...view(800, 640, 1.2), duration: 0.6, ease: "expo.out" }, 0);
+      tl.to("#s-cam", { ...view(640, 1040, 2.0), duration: 0.55, ease: "power2.inOut" }, 1.8);
       // Title.
       tl.fromTo("#s-band", { opacity: 0 }, { opacity: 1, duration: 0.15, ease: "none" }, 0.9);
       document.querySelectorAll("#s-title .w").forEach((w, i) => tl.fromTo(w, { opacity: 0, filter: "blur(6px)" }, { opacity: 1, filter: "blur(0px)", duration: 0.13, ease: "power2.out" }, 1.0 + i * 0.067));
       tl.to("#s-title", { opacity: 0, filter: "blur(6px)", duration: 0.2, ease: "power3.in" }, 5.4);
       tl.to("#s-band", { opacity: 0, duration: 0.15, ease: "none" }, 5.5);
-      // Zoom through the transfer row into the report.
-      tl.to("#s-cam", { ...view(620, 883, 14), duration: 0.4, ease: "power3.in" }, 5.9);
+      // Zoom through the invoice route into the report.
+      tl.to("#s-cam", { ...view(620, 962, 14), duration: 0.4, ease: "power3.in" }, 5.9);
       tl.to("#root", { opacity: 0, duration: 0.25, ease: "power2.in" }, 6.05);
       window.__timelines = window.__timelines || {};
       window.__timelines["surface"] = tl;

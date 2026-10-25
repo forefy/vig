@@ -1,4 +1,4 @@
-GOAL:    A security lead who already has findings from three places sees them land in one report that keeps every correction, and opens github.com/forefy/vig.
+GOAL:    A security lead who already has web findings from three places sees them land in one report that keeps every correction, and opens github.com/forefy/vig.
 OUTPUT:  HyperFrames, 1920 x 1080, 30 fps, MP4 (H.264). Silent by design: it plays muted in a README.
 TIME:    45 s x 30 = 1350 frames. No music, so cuts follow the motion.
 

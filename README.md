@@ -1,7 +1,7 @@
 # Reporting Dashboard and Determinism Layer for Security Audit Reports
 
 <p align="center">
-  <img src="docs/hero/vig-feature.gif" alt="Findings come in from an operator, an agent and a fuzzer, get checked at the door and come out in one shape; the program's surface is mapped; the report is read as a chain, its fix is a patch, a severity is re-rated with a reason, the findings fold by who can reach them, and the changes log keeps every correction" width="880"/>
+  <img src="docs/hero/vig-feature.gif" alt="Findings come in from an operator, an agent and three tools, get checked at the door and come out in one shape; the site is mapped host by host and route by route; the report is read as a chain on an invoice IDOR, the SQL injection fix is a patch, a role finding is re-rated with a reason, the findings fold by who can reach them, and the changes log keeps every correction" width="880"/>
 </p>
 
 <p align="center">
@@ -48,7 +48,7 @@ Findings arrive from anywhere, and from the agentic context you send them to vig
   </tr>
 </table>
 
-Everything above is the seeded demo (`make seed`, then `/r/vault-signer-check`): an invented program with invented findings.
+Everything above is the seeded demo (`make seed`): invented targets with invented findings. The film is the web audit at `/r/ledgerly-invoice-idor`; the report shot and the grid are the Solana audit at `/r/vault-signer-check`.
 
 - [Determinism](#determinism)
 - [The dashboard](#the-dashboard)
