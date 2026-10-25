@@ -137,7 +137,9 @@ func (d *Deps) createAudit(ctx context.Context, in *createAuditIn) (*body[Audit]
 		}
 		return &body[Audit]{Body: out}, nil
 	}
-	if len(in.Body.ProgramIDs) == 0 {
+	// A target with deployed subjects names at least one; a repository with
+	// no chain has none to name.
+	if adapter, ok := d.Adapters[t.Adapter]; len(in.Body.ProgramIDs) == 0 && (!ok || hasStep(adapter, "programs")) {
 		return nil, huma.Error400BadRequest("program_ids: at least one program")
 	}
 	if len(in.Body.Files) == 0 {

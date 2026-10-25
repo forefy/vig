@@ -51,7 +51,7 @@ type adminDelayIn struct {
 type adminAuditsIn struct {
 	State   string `query:"state" enum:"queued,claimed,cloning,programs_verified,analysis,human_review,delivered,delayed,failed,cancelled" required:"false"`
 	UserID  string `query:"user_id" required:"false"`
-	Adapter string `query:"adapter" enum:"solana,ethereum,webapp" required:"false"`
+	Adapter string `query:"adapter" enum:"solana,ethereum,webapp,repo" required:"false"`
 	Hidden  string `query:"hidden" enum:"true,false" required:"false" doc:"Only hidden or only visible audits; both when absent"`
 	Q       string `query:"q" required:"false" doc:"Repository name contains"`
 	Limit   int    `query:"limit" minimum:"1" maximum:"500" required:"false"`

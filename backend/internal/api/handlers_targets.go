@@ -533,7 +533,13 @@ func (d *Deps) getTree(ctx context.Context, in *treeIn) (*body[Tree], error) {
 	if err != nil {
 		return nil, err
 	}
-	tree, err := github.BuildTree(root, t.Subpath)
+	// The adapter says which files start selected; the chain adapters take
+	// the Rust and Solidity rule.
+	selected := github.AutoSelect
+	if fs, ok := d.Adapters[t.Adapter].(core.FileSelector); ok {
+		selected = fs.AutoSelect
+	}
+	tree, err := github.BuildTreeWith(root, t.Subpath, selected)
 	if err != nil {
 		return nil, fail(err)
 	}

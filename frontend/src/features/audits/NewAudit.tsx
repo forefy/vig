@@ -442,13 +442,15 @@ export function NewAudit() {
     [target, setTree, setSelected],
   )
 
-  // A restored draft parked on scope or review has no tree in storage.
+  // A restored draft parked on scope or review has no tree in storage. A
+  // restored selection is kept; an empty one takes the tree's own.
   const needsTree = !isSite && (stepKey === 'scope' || stepKey === 'review') && !!target && !tree
+  const hasSelection = selected.size > 0
   useEffect(() => {
     if (!needsTree) return
-    const t = setTimeout(() => void loadTree(true), 0)
+    const t = setTimeout(() => void loadTree(hasSelection), 0)
     return () => clearTimeout(t)
-  }, [needsTree, loadTree])
+  }, [needsTree, hasSelection, loadTree])
 
   async function queue() {
     if (!target) return
@@ -630,7 +632,7 @@ export function NewAudit() {
                         <span className="text-muted-foreground">{short(target.revision.commit, 7, 0)}</span>
                         {target.revision.author && <span className="text-muted-foreground">{target.revision.author}</span>}
                         <span className="text-faint">{fmtDate(target.revision.date)}</span>
-                        {!scanned ? (
+                        {!programsStep ? null : !scanned ? (
                           <StateBadge state="pending">scanning</StateBadge>
                         ) : (
                           <StateBadge state={liveDeclared.length > 0 ? 'ok' : 'neutral'}>
@@ -864,7 +866,7 @@ export function NewAudit() {
                   <Pin pin={pin} adapter={adapterKey} />
                 </div>
                 <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-                  <Stat label={words.programs} value={programs.length} hint={programs.map((x) => short(x.id, 4, 4)).join(' ')} />
+                  {programsStep && <Stat label={words.programs} value={programs.length} hint={programs.map((x) => short(x.id, 4, 4)).join(' ')} />}
                   <Stat label="files" value={selected.size} hint={`${selectedLines.toLocaleString('en-US')} code lines`} />
                   <Stat label="cost" value={costKind === 'slot' ? 'slot' : '1'} hint={costKind === 'slot' ? 'today' : 'credit'} tone={canRun ? undefined : 'warn'} />
                   <Stat label="eta" value="24h" />
@@ -964,7 +966,7 @@ export function NewAudit() {
                   <Row k="source" v={target ? target.repo : sourceKind === 'installation' ? 'GitHub App' : 'GitHub'} />
                   <Row k="commit" v={target ? short(target.revision.commit, 7, 0) : '-'} />
                   {coverage === 'diff' && <Row k="base" v={base.trim() ? short(base.trim(), 7, 0) : '-'} />}
-                  <Row k={words.programs} v={programs.length ? String(programs.length) : 'none · source only'} />
+                  {programsStep && <Row k={words.programs} v={programs.length ? String(programs.length) : 'none · source only'} />}
                   <Row k="scope" v={tree ? `${selected.size} files` : '-'} />
                 </>
               )}

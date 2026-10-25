@@ -26,13 +26,15 @@ export function chainWords(adapter: Adapter): ChainWords {
   // A web target has no chain: its places are hosts and routes, and the
   // facets of a report fold its findings by those.
   const web = adapter === 'webapp'
+  // A plain repository has neither: its places are packages and functions.
+  const repo = adapter === 'repo'
   return {
     evm,
     web,
-    program: web ? 'host' : evm ? 'contract' : 'program',
-    programs: web ? 'hosts' : evm ? 'contracts' : 'programs',
-    instruction: web ? 'route' : evm ? 'function' : 'instruction',
-    instructions: web ? 'routes' : evm ? 'functions' : 'instructions',
+    program: web ? 'host' : evm ? 'contract' : repo ? 'package' : 'program',
+    programs: web ? 'hosts' : evm ? 'contracts' : repo ? 'packages' : 'programs',
+    instruction: web ? 'route' : evm || repo ? 'function' : 'instruction',
+    instructions: web ? 'routes' : evm || repo ? 'functions' : 'instructions',
     height: evm ? 'block' : 'slot',
     signer: evm ? 'sender' : 'signer',
     signers: evm ? 'senders' : 'signers',

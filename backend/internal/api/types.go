@@ -203,7 +203,7 @@ type Audit struct {
 	ID            string          `json:"id"`
 	TargetID      string          `json:"target_id"`
 	Repo          string          `json:"repo"`
-	Adapter       string          `json:"adapter" enum:"solana,ethereum,webapp" doc:"The target's adapter: which chain's words the audit speaks, or webapp for a live website"`
+	Adapter       string          `json:"adapter" enum:"solana,ethereum,webapp,repo" doc:"The target's adapter: which chain's words the audit speaks, webapp for a live website, repo for a repository with no chain"`
 	Coverage      string          `json:"coverage" enum:"full,diff"`
 	BaseSHA       string          `json:"base_sha,omitempty"`
 	HeadSHA       string          `json:"head_sha"`
@@ -226,7 +226,7 @@ type Audit struct {
 type Report struct {
 	ID            string                `json:"id"`
 	AuditID       string                `json:"audit_id"`
-	Adapter       string                `json:"adapter,omitempty" enum:"solana,ethereum,webapp"`
+	Adapter       string                `json:"adapter,omitempty" enum:"solana,ethereum,webapp,repo"`
 	Document      core.FindingsDocument `json:"document"`
 	IsOwner       bool                  `json:"is_owner" doc:"Whether exploit paths are included"`
 	PublishedSlug string                `json:"published_slug,omitempty"`

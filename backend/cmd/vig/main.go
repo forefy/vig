@@ -22,6 +22,7 @@ import (
 	embeddedpostgres "github.com/fergusstrange/embedded-postgres"
 
 	"github.com/forefy/vig/backend/internal/adapter/ethereum"
+	"github.com/forefy/vig/backend/internal/adapter/repo"
 	"github.com/forefy/vig/backend/internal/adapter/solana"
 	"github.com/forefy/vig/backend/internal/adapter/webapp"
 	"github.com/forefy/vig/backend/internal/api"
@@ -47,7 +48,7 @@ func main() {
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
 		case "openapi":
-			if err := api.WriteOpenAPI(os.Stdout, map[string]core.Adapter{solana.Key: solana.New(), ethereum.Key: ethereum.New(), webapp.Key: webapp.New()}); err != nil {
+			if err := api.WriteOpenAPI(os.Stdout, map[string]core.Adapter{solana.Key: solana.New(), ethereum.Key: ethereum.New(), webapp.Key: webapp.New(), repo.Key: repo.New()}); err != nil {
 				fatal(err)
 			}
 		case "migrate":
@@ -139,7 +140,7 @@ func deps(cfg config.Config, st *store.Store) *api.Deps {
 		fatal(err)
 	}
 	adapter := solana.NewWired(inspector, scan.NewDB(filepath.Join(cfg.DataDir, "advisories")))
-	adapters := map[string]core.Adapter{solana.Key: adapter, ethereum.Key: ethereum.NewWired(cfg.EVMRPC), webapp.Key: webapp.NewWired()}
+	adapters := map[string]core.Adapter{solana.Key: adapter, ethereum.Key: ethereum.NewWired(cfg.EVMRPC), webapp.Key: webapp.NewWired(), repo.Key: repo.New()}
 	// The operator's match result rewrites the adapter's panel rows so the
 	// badges and the columns never disagree.
 	st.PanelPatch = solana.MatchRows

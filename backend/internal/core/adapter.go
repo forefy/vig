@@ -145,7 +145,7 @@ type TreeNode struct {
 // Preflight is the deterministic scan: panel facts, tree, lines, advisories
 // and what the source declares.
 type Preflight struct {
-	Adapter    string              `json:"adapter,omitempty" enum:"solana,ethereum,webapp" doc:"The adapter that read the checkout"`
+	Adapter    string              `json:"adapter,omitempty" enum:"solana,ethereum,webapp,repo" doc:"The adapter that read the checkout"`
 	Panels     []VerificationPanel `json:"panels"`
 	Tree       []TreeNode          `json:"tree"`
 	Lines      int                 `json:"lines" doc:"Lines in the auto-selected scope"`
@@ -181,6 +181,13 @@ type Advisory struct {
 // OwnershipProofSpec tells the client how to prove ownership of a subject.
 type OwnershipProofSpec struct {
 	Method string `json:"method" doc:"e.g. sign_nonce_with_upgrade_authority"`
+}
+
+// FileSelector is implemented by an adapter whose default scope is not the
+// chain adapters' (Rust programs and Solidity contracts): the tree endpoint
+// asks it which files start selected.
+type FileSelector interface {
+	AutoSelect(path string) bool
 }
 
 // LocationKind is a way a finding can point at code for this target.

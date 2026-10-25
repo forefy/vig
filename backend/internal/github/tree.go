@@ -71,8 +71,48 @@ func AutoSelect(path string) bool {
 	return false
 }
 
-// BuildTree walks a checkout under an optional subdirectory.
-func BuildTree(root, sub string) (Tree, error) {
+// codeExts are the source files any repository audit selects by default.
+var codeExts = map[string]bool{
+	".py": true, ".go": true, ".rs": true, ".ts": true, ".tsx": true, ".js": true, ".jsx": true, ".mjs": true, ".cjs": true,
+	".java": true, ".kt": true, ".swift": true, ".c": true, ".h": true, ".cpp": true, ".cc": true, ".hpp": true, ".cs": true,
+	".rb": true, ".php": true, ".scala": true, ".sol": true, ".move": true, ".ex": true, ".exs": true, ".erl": true, ".zig": true, ".lua": true,
+}
+
+var codeManifests = map[string]bool{"pyproject.toml": true, "setup.py": true, "setup.cfg": true, "requirements.txt": true, "go.mod": true, "Cargo.toml": true, "Gemfile": true, "composer.json": true, "build.gradle": true, "pom.xml": true}
+
+var skipCodeDirs = map[string]bool{"tests": true, "test": true, "testing": true, "e2e": true, "examples": true, "example": true, "docs": true, "doc": true, "vendor": true, "third_party": true, "benchmarks": true, "bench": true, "fixtures": true, "scripts": true}
+
+// AutoSelectCode is the default scope of a repository with no chain: the
+// code of any language plus the manifests, never tests, docs, examples,
+// vendored code or tooling.
+func AutoSelectCode(path string) bool {
+	base := filepath.Base(path)
+	parts := strings.Split(path, "/")
+	for _, p := range parts[:len(parts)-1] {
+		if skipCodeDirs[p] {
+			return false
+		}
+	}
+	if deselectNames[base] {
+		return false
+	}
+	if codeManifests[base] {
+		return true
+	}
+	lower := strings.ToLower(base)
+	if strings.HasPrefix(lower, "test_") || lower == "conftest.py" || strings.Contains(lower, "_test.") || strings.Contains(lower, ".test.") || strings.Contains(lower, ".spec.") || strings.HasSuffix(lower, "_spec.rb") {
+		return false
+	}
+	return codeExts[strings.ToLower(filepath.Ext(base))]
+}
+
+// BuildTree walks a checkout under an optional subdirectory with the
+// chain adapters' selection.
+func BuildTree(root, sub string) (Tree, error) { return BuildTreeWith(root, sub, AutoSelect) }
+
+// BuildTreeWith walks a checkout under an optional subdirectory, selecting
+// files with the given rule.
+func BuildTreeWith(root, sub string, selected func(path string) bool) (Tree, error) {
 	// The sub path is rooted before it is cleaned, so "../.." cannot climb
 	// out of the checkout: it resolves to the root itself.
 	base := root
@@ -126,7 +166,7 @@ func BuildTree(root, sub string) (Tree, error) {
 		t.TotalFiles++
 		t.Lines[f.path] = f.lines
 		t.Code[f.path] = f.code
-		sel := AutoSelect(f.path)
+		sel := selected(f.path)
 		if sel {
 			t.SelectedFiles++
 			t.SelectedLines += f.lines
@@ -241,7 +281,7 @@ func countLines(p string) (int, int) {
 		return 0, 0
 	}
 	switch strings.ToLower(filepath.Ext(p)) {
-	case ".rs", ".ts", ".tsx", ".js", ".jsx", ".go", ".c", ".h", ".cpp", ".sol", ".move", ".java", ".kt", ".swift":
+	case ".rs", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".go", ".c", ".h", ".cpp", ".cc", ".hpp", ".cs", ".sol", ".move", ".java", ".kt", ".swift", ".scala", ".php", ".zig":
 		return rustsrc.CountLines(p, b, true)
 	}
 	return rustsrc.CountLines(p, b, false)

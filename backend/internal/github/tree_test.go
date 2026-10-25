@@ -379,3 +379,18 @@ func TestDeclaredIDs(t *testing.T) {
 		t.Fatal("missing root returns an empty, non-nil map")
 	}
 }
+
+func TestAutoSelectCode(t *testing.T) {
+	yes := []string{"gunicorn/app/base.py", "gunicorn/http/parser.py", "setup.py", "pyproject.toml", "cmd/vig/main.go", "src/index.ts", "lib/server.rb"}
+	no := []string{"tests/test_http.py", "gunicorn/workers/conftest.py", "docs/source/conf.py", "examples/echo.py", "vendor/lib/x.go", "src/server_test.go", "src/app.test.ts", "scripts/release.py", "README.md", "package.json"}
+	for _, p := range yes {
+		if !AutoSelectCode(p) {
+			t.Errorf("%s must be selected", p)
+		}
+	}
+	for _, p := range no {
+		if AutoSelectCode(p) {
+			t.Errorf("%s must be left out", p)
+		}
+	}
+}
