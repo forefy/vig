@@ -11,6 +11,10 @@ import (
 // captured from the real repository at the real commit.
 var capture func(repo, commit string, fs []core.Finding)
 
+// captureRefs reads the lines the findings' GitHub links point at, through
+// the same capture a stored report gets; nil leaves the links plain.
+var captureRefs func(doc *core.FindingsDocument)
+
 func withSnippets(repo, commit string, fs []core.Finding) []core.Finding {
 	if capture != nil {
 		capture(repo, commit, fs)
@@ -98,7 +102,11 @@ func doc(p core.Pin, findings []core.Finding) core.FindingsDocument {
 			findings[i].Status = core.FindingOpen
 		}
 	}
-	return core.FindingsDocument{Report: core.ReportHeader{Pin: p, Summary: core.Summarize(findings)}, Findings: findings}
+	d := core.FindingsDocument{Report: core.ReportHeader{Pin: p, Summary: core.Summarize(findings)}, Findings: findings}
+	if captureRefs != nil {
+		captureRefs(&d)
+	}
+	return d
 }
 
 // demoCode is the code at each demo location, for when the demo repository
@@ -241,7 +249,7 @@ func vaultReport(repo, commit, program string) core.FindingsDocument {
 			Impact:      "Anyone who knows the authority's public key can act as the authority.\n\n- every instruction that trusts `authority` is open to every wallet on the network\n- no funds have to be staked or risked to try it",
 			ExploitPath: "Build a transaction that passes the real authority pubkey as a non-signer account and calls the instruction; the runtime accepts it because the program never inspects is_signer.",
 			Fix:         "- Declare the account as `Signer<'info>` in the accounts struct, or check `authority.is_signer` before acting on it.",
-			References:  []string{"https://solana.com/developers/courses/program-security/signer-auth"}},
+			References:  []string{"https://solana.com/developers/courses/program-security/signer-auth", "https://github.com/coral-xyz/sealevel-attacks/blob/master/programs/0-signer-authorization/secure/src/lib.rs#L7-L13"}},
 		{Severity: core.SeverityHigh, Title: "Owner check missing on token account", ExploitableBy: core.ExploitableAnyone,
 			Evidence:  &core.Evidence{Kind: core.EvidenceStatic},
 			Location:  core.Location{File: "programs/2-owner-checks/insecure/src/lib.rs", Package: "2-owner-checks", LineStart: 13, LineEnd: 13, ProgramID: program, Instruction: "log_message"},

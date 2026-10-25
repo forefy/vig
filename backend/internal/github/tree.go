@@ -346,8 +346,19 @@ func Segment(root, file string, start, end int) (int, string, bool) {
 		end = start
 	}
 	b, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(file)))
-	if err != nil || len(b) > 4<<20 {
+	if err != nil {
 		return 0, "", false
+	}
+	return SegmentBytes(b, start, end)
+}
+
+// SegmentBytes is Segment over a file already in memory.
+func SegmentBytes(b []byte, start, end int) (int, string, bool) {
+	if start < 1 || len(b) > 4<<20 {
+		return 0, "", false
+	}
+	if end < start {
+		end = start
 	}
 	lines := strings.Split(strings.ReplaceAll(string(b), "\r\n", "\n"), "\n")
 	if start > len(lines) {

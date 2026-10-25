@@ -289,6 +289,7 @@ type Finding struct {
 	Fix                 string           `json:"fix" minLength:"1" doc:"Required. A '- ' bullet per change. A code fence (three backticks on their own line, closed the same way) right after a bullet carries the definite fix: the correct code, the exact header value, the configuration line. A fence whose info line names a place, like rust src/lib.rs:41-45, is shown as a patch replacing those lines (path:line alone inserts before it)"`
 	FixKind             FixKind          `json:"fix_kind,omitempty" enum:"code,operational" doc:"Optional. operational says there are no lines to patch (rotate, revoke, configure), so the dry run stops advising a placed fence for a finding that names a file"`
 	References          []string         `json:"references,omitempty" doc:"Optional."`
+	ReferenceCode       []ReferenceCode  `json:"reference_code,omitempty" doc:"Set by the server: the lines each GitHub file link in references points at, read when the report was stored and pinned to their commit"`
 	Snippet             *Snippet         `json:"snippet,omitempty" doc:"The enclosing item at the location"`
 	SitesKind           SitesKind        `json:"sites_kind,omitempty" enum:"flow,occurrences" doc:"Recommended with sites. How the sites relate; required when sites are present"`
 	Sites               []Site           `json:"sites,omitempty" doc:"Recommended for critical and high. Further places this finding points at, in order"`
@@ -363,11 +364,12 @@ const (
 
 // Known is one finding an earlier report raised on this code.
 type Known struct {
-	Title     string      `json:"title" minLength:"3" maxLength:"140"`
-	Severity  Severity    `json:"severity" enum:"critical,high,medium,low,info"`
-	Source    string      `json:"source" minLength:"1" maxLength:"60" doc:"Who raised it and when, e.g. Cyfrin 2026-03"`
-	Status    KnownStatus `json:"status" enum:"fixed,open,acknowledged" doc:"At the pinned commit"`
-	Reference string      `json:"reference,omitempty" maxLength:"300" doc:"The report, as a path in the repository or a URL"`
+	Title     string         `json:"title" minLength:"3" maxLength:"140"`
+	Severity  Severity       `json:"severity" enum:"critical,high,medium,low,info"`
+	Source    string         `json:"source" minLength:"1" maxLength:"60" doc:"Who raised it and when, e.g. Cyfrin 2026-03"`
+	Status    KnownStatus    `json:"status" enum:"fixed,open,acknowledged" doc:"At the pinned commit"`
+	Reference string         `json:"reference,omitempty" maxLength:"300" doc:"The report, as a path in the repository or a URL"`
+	Code      *ReferenceCode `json:"code,omitempty" doc:"Set by the server: the lines a GitHub file link in reference points at, read when the report was stored"`
 }
 
 // FindingsDocument is the single exchange format: the operator CLI posts it,
@@ -910,6 +912,11 @@ func (d *FindingsDocument) Advise() []string {
 		}
 		if attached == 0 && (f.Severity == SeverityCritical || f.Severity == SeverityHigh) {
 			say(f, "no attachments; a capture or recording of the PoC and the script that ran it make it reproducible")
+		}
+		for _, raw := range f.References {
+			if link, ok := ParseBlobLink(raw); ok && !link.IsSHA() {
+				say(f, fmt.Sprintf("references a file on %s; its lines are read and the link pinned to that commit when the report is stored", link.Rev))
+			}
 		}
 	}
 	if d.Report.Methods == nil {

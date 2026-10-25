@@ -461,6 +461,7 @@ func (d *Deps) adminReviseReport(ctx context.Context, in *adminReviseIn) (*body[
 		if root, ok := d.GitHub.Cached(a.Repo, a.HeadSHA); ok {
 			github.AttachSnippets(root, doc.Findings)
 		}
+		d.GitHub.CaptureReferences(ctx, &doc)
 	}
 	rev, err := d.Store.ReviseReport(ctx, a.ID, doc, principal(ctx).UserID)
 	if err != nil {

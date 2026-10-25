@@ -171,10 +171,14 @@ func insertFinding(ctx context.Context, tx pgx.Tx, reportID string, f core.Findi
 	if len(f.FixSites) > 0 {
 		fixSites, _ = json.Marshal(f.FixSites)
 	}
+	var refCode []byte
+	if len(f.ReferenceCode) > 0 {
+		refCode, _ = json.Marshal(f.ReferenceCode)
+	}
 	id := NewID()
-	_, err := tx.Exec(ctx, `insert into findings(id, report_id, ordinal, severity, title, location, description, exploit_path, fix, refs, status, carried_from_finding_id, evidence, snippet, sites_kind, sites, exploitable_by, visuals, impact, expected, normal_use, fix_sites, fix_kind)
-		values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)`,
-		id, reportID, f.Ordinal, string(f.Severity), f.Title, loc, f.Description, nullStr(f.ExploitPath), f.Fix, refs, string(status), carried, evidence, snippet, nullStr(string(f.SitesKind)), sites, nullStr(string(f.ExploitableBy)), visuals, nullStr(f.Impact), nullStr(f.Expected), nullStr(f.NormalUse), fixSites, nullStr(string(f.FixKind)))
+	_, err := tx.Exec(ctx, `insert into findings(id, report_id, ordinal, severity, title, location, description, exploit_path, fix, refs, status, carried_from_finding_id, evidence, snippet, sites_kind, sites, exploitable_by, visuals, impact, expected, normal_use, fix_sites, fix_kind, reference_code)
+		values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24)`,
+		id, reportID, f.Ordinal, string(f.Severity), f.Title, loc, f.Description, nullStr(f.ExploitPath), f.Fix, refs, string(status), carried, evidence, snippet, nullStr(string(f.SitesKind)), sites, nullStr(string(f.ExploitableBy)), visuals, nullStr(f.Impact), nullStr(f.Expected), nullStr(f.NormalUse), fixSites, nullStr(string(f.FixKind)), refCode)
 	return id, wrap(err)
 }
 
@@ -366,7 +370,7 @@ func (s *Store) listFindings(ctx context.Context, db DB, reportID string) ([]Fin
 }
 
 func (s *Store) listFindingsWhere(ctx context.Context, db DB, where string, args ...any) ([]Finding, error) {
-	rows, err := db.Query(ctx, `select f.id, f.report_id, f.ordinal, f.severity, f.title, f.location, f.description, coalesce(f.exploit_path,''), f.fix, f.refs, f.status, coalesce(f.carried_from_finding_id::text,''), f.evidence, f.snippet, coalesce(f.sites_kind,''), f.sites, coalesce(f.exploitable_by,''), f.visuals, coalesce(f.impact,''), coalesce(f.expected,''), coalesce(f.normal_use,''), f.fix_sites, coalesce(f.fix_kind,''), f.created_at, f.updated_at
+	rows, err := db.Query(ctx, `select f.id, f.report_id, f.ordinal, f.severity, f.title, f.location, f.description, coalesce(f.exploit_path,''), f.fix, f.refs, f.status, coalesce(f.carried_from_finding_id::text,''), f.evidence, f.snippet, coalesce(f.sites_kind,''), f.sites, coalesce(f.exploitable_by,''), f.visuals, coalesce(f.impact,''), coalesce(f.expected,''), coalesce(f.normal_use,''), f.fix_sites, coalesce(f.fix_kind,''), f.reference_code, f.created_at, f.updated_at
 		from findings f join reports r on r.id=f.report_id join audits pa on pa.id=r.audit_id join targets pt on pt.id=pa.target_id where `+where+` order by f.ordinal`, args...)
 	if err != nil {
 		return nil, err
@@ -375,10 +379,10 @@ func (s *Store) listFindingsWhere(ctx context.Context, db DB, where string, args
 	out := []Finding{}
 	for rows.Next() {
 		var f Finding
-		var loc, refs, evidence, snippet, sites, visuals, impact, expected, normalUse, fixSites []byte
+		var loc, refs, evidence, snippet, sites, visuals, impact, expected, normalUse, fixSites, refCode []byte
 		var fixKind string
 		var sitesKind string
-		if err := rows.Scan(&f.ID, &f.ReportID, &f.Ordinal, &f.Severity, &f.Title, &loc, &f.Description, &f.ExploitPath, &f.Fix, &refs, &f.Status, &f.CarriedFromID, &evidence, &snippet, &sitesKind, &sites, &f.ExploitableBy, &visuals, &impact, &expected, &normalUse, &fixSites, &fixKind, &f.CreatedAt, &f.UpdatedAt); err != nil {
+		if err := rows.Scan(&f.ID, &f.ReportID, &f.Ordinal, &f.Severity, &f.Title, &loc, &f.Description, &f.ExploitPath, &f.Fix, &refs, &f.Status, &f.CarriedFromID, &evidence, &snippet, &sitesKind, &sites, &f.ExploitableBy, &visuals, &impact, &expected, &normalUse, &fixSites, &fixKind, &refCode, &f.CreatedAt, &f.UpdatedAt); err != nil {
 			return nil, err
 		}
 		_ = json.Unmarshal(loc, &f.Location)
@@ -404,6 +408,9 @@ func (s *Store) listFindingsWhere(ctx context.Context, db DB, where string, args
 		f.FixKind = core.FixKind(fixKind)
 		if len(fixSites) > 0 {
 			_ = json.Unmarshal(fixSites, &f.FixSites)
+		}
+		if len(refCode) > 0 {
+			_ = json.Unmarshal(refCode, &f.ReferenceCode)
 		}
 		out = append(out, f)
 	}

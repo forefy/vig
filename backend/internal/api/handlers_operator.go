@@ -214,6 +214,7 @@ func (d *Deps) postJobReport(ctx context.Context, in *opReportIn) (*body[Report]
 		if root, ok := d.GitHub.Cached(a.Repo, a.HeadSHA); ok {
 			github.AttachSnippets(root, doc.Findings)
 		}
+		d.GitHub.CaptureReferences(ctx, &doc)
 	}
 	r, err := d.Store.StoreReport(ctx, a.ID, doc)
 	if err != nil {

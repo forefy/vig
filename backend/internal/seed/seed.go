@@ -115,6 +115,11 @@ func (sd *Seeder) Run(ctx context.Context) (Result, error) {
 		github.AttachSnippets(root, fs)
 		attachDemoCode(fs)
 	}
+	captureRefs = func(doc *core.FindingsDocument) {
+		if sd.GitHub != nil {
+			sd.GitHub.CaptureReferences(ctx, doc)
+		}
+	}
 	res := Result{Users: map[string]string{}, TOTPSecret: TOTPSecret, APIKey: sd.APIKey(), OperatorToken: sd.OperatorToken()}
 	if ident, err := s.FindIdentity(ctx, s.Pool, "github", marker); err == nil {
 		for _, name := range []string{UserAdmin, UserPro, UserFree} {

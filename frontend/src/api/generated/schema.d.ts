@@ -2453,6 +2453,8 @@ export interface components {
              * @description Required.
              */
             ordinal: number;
+            /** @description Set by the server: the lines each GitHub file link in references points at, read when the report was stored and pinned to their commit */
+            reference_code?: components["schemas"]["ReferenceCode"][] | null;
             /** @description Optional. */
             references?: string[] | null;
             /**
@@ -2695,6 +2697,8 @@ export interface components {
             token_expires_at: string;
         };
         Known: {
+            /** @description Set by the server: the lines a GitHub file link in reference points at, read when the report was stored */
+            code?: components["schemas"]["ReferenceCode"];
             /** @description The report, as a path in the repository or a URL */
             reference?: string;
             /** @enum {string} */
@@ -3354,6 +3358,19 @@ export interface components {
              */
             readonly $schema?: string;
             reason: string;
+        };
+        ReferenceCode: {
+            code: components["schemas"]["Snippet"];
+            commit: string;
+            /** Format: int64 */
+            end: number;
+            file: string;
+            pinned: string;
+            /** @description owner/name */
+            repo: string;
+            /** Format: int64 */
+            start: number;
+            url: string;
         };
         Report: {
             /**

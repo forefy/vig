@@ -8,7 +8,7 @@ import { $api } from '@/api/hooks'
 import { api } from '@/api/client'
 import { Page, PageHeader } from '@/app/Shell'
 import { Loading } from '@/features/auth/guards'
-import { Pin, StateBadge, severityState, severityInk, severityDot, MethodsStrip, EvidenceBadge, FindingCode, FactGroup, FactRow, Prose } from '@/components/primitives'
+import { Pin, StateBadge, severityState, severityInk, severityDot, MethodsStrip, EvidenceBadge, FindingCode, FactGroup, FactRow, Prose, Reference } from '@/components/primitives'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
@@ -503,10 +503,11 @@ export function ReportBody({ report, onStatus, onSeverity, surfaceHref }: { repo
                   />
                 </div>
                 {f.references && f.references.length > 0 && (
-                  <div className="flex flex-wrap gap-3">
-                    {f.references.map((u) => (
-                      <a key={u} href={u} target="_blank" rel="noreferrer" className="truncate font-mono text-[11px] text-muted-foreground hover:text-foreground">{u.replace(/^https?:\/\//, '')}</a>
-                    ))}
+                  <div className="flex flex-wrap gap-x-3 gap-y-2">
+                    {f.references.map((u) => {
+                      const code = f.reference_code?.find((c) => c.url === u)
+                      return <Reference key={u} url={u} code={code} className={code ? 'basis-full' : undefined} />
+                    })}
                   </div>
                 )}
               </article>
@@ -613,6 +614,7 @@ function KnownStrip({ known, repo, commit }: { known: components['schemas']['Kno
                 <span className="rounded-sm border border-border px-1.5 font-mono text-[10.5px] text-muted-foreground">{k.source}</span>
               )}
               <StateBadge state={knownState[k.status]} className="h-5 px-1.5 text-[10.5px]">{k.status === 'fixed' ? 'fixed at commit' : k.status}</StateBadge>
+              {k.code && k.reference && <Reference url={k.reference} code={k.code} className="col-span-full pt-1" />}
             </li>
           )
         })}

@@ -16,6 +16,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/forefy/vig/backend/internal/core"
 )
 
 func TestParseURL(t *testing.T) {
@@ -243,6 +245,15 @@ func (g *ghServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		write(map[string]any{"default_branch": "trunk", "full_name": "o/n"})
 	case "/repos/o/n/commits/trunk", "/repos/o/n/commits/v1.0.0", "/repos/o/n/commits/abc1234":
 		write(map[string]any{"sha": "abc1234abc1234abc1234abc1234abc1234abc12", "commit": map[string]any{"author": map[string]any{"name": "Ada", "date": "2026-01-02T03:04:05Z"}}})
+	case "/repos/o/n/contents/src/lib.rs":
+		if r.URL.Query().Get("ref") != "abc1234abc1234abc1234abc1234abc1234abc12" || r.Header.Get("Accept") != "application/vnd.github.raw+json" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "application/vnd.github.raw")
+		io.WriteString(w, "fn a() {}\nfn b() {\n    let x = 1;\n    let y = 2;\n}\nfn c() {}\n")
+	case "/repos/o/n/contents/missing.rs":
+		w.WriteHeader(http.StatusNotFound)
 	case "/repos/o/n/commits/nope":
 		w.WriteHeader(http.StatusUnprocessableEntity)
 		write(map[string]any{"message": "No commit found for SHA: nope"})
@@ -426,5 +437,38 @@ func TestCleanup(t *testing.T) {
 	}
 	if n := New("http://unused", "", filepath.Join(data, "nope")).Cleanup(time.Hour); n != 0 {
 		t.Fatal("missing clones dir is not an error")
+	}
+}
+
+func TestCaptureReferences(t *testing.T) {
+	srv := httptest.NewServer(&ghServer{})
+	defer srv.Close()
+	c := New(srv.URL+"/", "tok", t.TempDir())
+	doc := core.FindingsDocument{
+		Report: core.ReportHeader{Known: []core.Known{{Title: "k", Reference: "https://github.com/o/n/blob/trunk/src/lib.rs#L3"}, {Title: "plain", Reference: "docs/old.md"}}},
+		Findings: []core.Finding{{References: []string{
+			"https://solana.com/x",
+			"https://github.com/o/n/blob/trunk/src/lib.rs#L3-L4",
+			"https://github.com/o/n/blob/nope/src/lib.rs#L1",
+			"https://github.com/o/n/blob/trunk/missing.rs#L1",
+		}}},
+	}
+	c.CaptureReferences(context.Background(), &doc)
+	f := doc.Findings[0]
+	if len(f.References) != 4 {
+		t.Fatalf("references must stay as written: %v", f.References)
+	}
+	if len(f.ReferenceCode) != 1 {
+		t.Fatalf("captured %+v", f.ReferenceCode)
+	}
+	rc := f.ReferenceCode[0]
+	if rc.URL != f.References[1] || rc.Pinned != "https://github.com/o/n/blob/abc1234abc1234abc1234abc1234abc1234abc12/src/lib.rs#L3-L4" || rc.Commit != "abc1234abc1234abc1234abc1234abc1234abc12" || rc.File != "src/lib.rs" || rc.Start != 3 || rc.End != 4 {
+		t.Fatalf("reference %+v", rc)
+	}
+	if rc.Code.StartLine < 1 || rc.Code.StartLine > 3 || !strings.Contains(rc.Code.Code, "let x = 1;") || !strings.Contains(rc.Code.Code, "let y = 2;") {
+		t.Fatalf("code %+v", rc.Code)
+	}
+	if doc.Report.Known[0].Code == nil || doc.Report.Known[0].Code.Start != 3 || doc.Report.Known[1].Code != nil {
+		t.Fatalf("known %+v %+v", doc.Report.Known[0].Code, doc.Report.Known[1].Code)
 	}
 }
