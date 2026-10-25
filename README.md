@@ -99,7 +99,7 @@ Target kinds are adapters: Solana programs, EVM contracts and live web applicati
 
 ## How to run it locally
 
-Needs Go 1.23+, Node 20+ and Docker (Postgres via compose).
+Needs Go 1.23+, Node 22.23.4+ and Docker (Postgres via compose).
 
 ```bash
 make setup          # tooling

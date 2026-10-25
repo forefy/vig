@@ -11,7 +11,7 @@
 # first two stages run natively on the builder and Go cross-compiles.
 
 # --- Stage 1: frontend -------------------------------------------------------
-FROM --platform=$BUILDPLATFORM node:20-alpine AS web
+FROM --platform=$BUILDPLATFORM node:22-alpine AS web
 WORKDIR /web
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
