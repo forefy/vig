@@ -81,3 +81,25 @@ func TestWithoutProof(t *testing.T) {
 		t.Fatal("the stored document is untouched")
 	}
 }
+
+func TestAFileThatIsAURLIsAURL(t *testing.T) {
+	d := proofDoc()
+	d.Findings[0].Location = Location{File: "https://app.example.test/api/run", LineStart: 1}
+	d.Findings[0].Sites[0].Location = Location{File: "HTTPS://app.example.test/api/run/2", LineStart: 1, LineEnd: 1}
+	if err := d.Validate(); err != nil {
+		t.Fatalf("validate: %v", err)
+	}
+	l := d.Findings[0].Location
+	if l.URL != "https://app.example.test/api/run" || l.File != "" || l.LineStart != 0 {
+		t.Fatalf("finding location %+v", l)
+	}
+	st := d.Findings[0].Sites[0].Location
+	if st.URL != "HTTPS://app.example.test/api/run/2" || st.File != "" || st.LineStart != 0 || st.LineEnd != 0 {
+		t.Fatalf("site location %+v", st)
+	}
+	// A real file stays a file.
+	d.Findings[0].Location = Location{File: "src/http.ts", LineStart: 3}
+	if err := d.Validate(); err != nil || d.Findings[0].Location.URL != "" {
+		t.Fatalf("file kept: %v %+v", err, d.Findings[0].Location)
+	}
+}

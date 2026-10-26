@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { hostOf, routeOf, routeShape, shortRoute } from './web'
+import { hostOf, placeOf, routeOf, routeShape, shortRoute } from './web'
 
 describe('routeShape', () => {
   it('folds ids the way the backend does', () => {
@@ -26,5 +26,13 @@ describe('routeOf and hostOf', () => {
   it('shortens a long route to its end', () => {
     expect(shortRoute('/a/b/c/d')).toBe('…/c/d')
     expect(shortRoute('/a/b')).toBe('/a/b')
+  })
+})
+
+describe('placeOf', () => {
+  it('reads an address written in file as the endpoint, with no line', () => {
+    expect(placeOf({ file: 'https://app.example.test/api/run', url: undefined })).toEqual({ url: 'https://app.example.test/api/run', file: '' })
+    expect(placeOf({ file: 'src/http.ts', url: 'https://app.example.test/x' })).toEqual({ url: 'https://app.example.test/x', file: '' })
+    expect(placeOf({ file: 'src/http.ts' })).toEqual({ url: '', file: 'src/http.ts' })
   })
 })

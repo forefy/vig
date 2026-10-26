@@ -43,3 +43,11 @@ export function shortRoute(route: string): string {
   const parts = route.split('/').filter(Boolean)
   return parts.length > 2 ? `…/${parts.slice(-2).join('/')}` : route
 }
+
+// Where a location is: the endpoint when it has one, or when what was
+// written in file is an address (older web findings put it there), else
+// the file. A place that is an address carries no line.
+export function placeOf(loc: { file?: string; url?: string }): { url: string; file: string } {
+  const url = loc.url || (loc.file && /^https?:\/\//i.test(loc.file) ? loc.file : '')
+  return { url, file: url ? '' : loc.file ?? '' }
+}

@@ -495,8 +495,28 @@ func Summarize(findings []Finding) Summary {
 }
 
 // Validate checks a findings document as the operator API receives it.
+// asPlace reads a location whose file is a URL as the endpoint it is: a
+// web finding written with the address in file, and a line number that
+// means nothing, shows as the address and nothing else.
+func (l *Location) asPlace() {
+	f := strings.TrimSpace(l.File)
+	lf := strings.ToLower(f)
+	if l.URL == "" && (strings.HasPrefix(lf, "http://") || strings.HasPrefix(lf, "https://")) {
+		l.URL = f
+		l.File = ""
+		l.LineStart = 0
+		l.LineEnd = 0
+	}
+}
+
 func (d *FindingsDocument) Validate() error {
 	var errs []string
+	for i := range d.Findings {
+		d.Findings[i].Location.asPlace()
+		for j := range d.Findings[i].Sites {
+			d.Findings[i].Sites[j].Location.asPlace()
+		}
+	}
 	if d.Report.AuditID == "" {
 		errs = append(errs, "report.audit_id is required")
 	}

@@ -5,6 +5,7 @@ import { Copy } from './Copy'
 import { Prose } from './Prose'
 import { VisualFigure, VisualMark } from './Visual'
 import { cn } from '@/lib/utils'
+import { placeOf } from '@/lib/web'
 import type { components } from '@/api/client'
 
 type Finding = components['schemas']['Finding']
@@ -67,7 +68,7 @@ export function FindingCode({ finding, visualSrc, pin }: { finding: Finding; vis
                 {st.kind === 'code' && flow && <span className={cn('num', i === active ? 'text-bad' : 'text-faint')}>{st.n}</span>}
                 {st.kind === 'code' ? (
                   <>
-                    <span className="max-w-[22rem] truncate">{st.site.note || st.site.location.url || `${base(st.site.location.file)}:${st.site.location.line_start}`}</span>
+                    <span className="max-w-[22rem] truncate">{st.site.note || placeOf(st.site.location).url || `${base(st.site.location.file)}:${st.site.location.line_start}`}</span>
                     {st.site.visuals?.[0] && <VisualMark visual={st.site.visuals[0]} className="text-faint" />}
                   </>
                 ) : (
@@ -114,10 +115,11 @@ export function FindingCode({ finding, visualSrc, pin }: { finding: Finding; vis
                 const loc = step.site.location
                 // A webapp location is the live endpoint itself, not repo
                 // lines: link straight to it and stop there.
-                if (loc.url) {
+                const place = placeOf(loc)
+                if (place.url) {
                   return (
-                    <a href={loc.url} target="_blank" rel="noreferrer" className="min-w-0 max-w-full break-all rounded-sm font-mono text-[11.5px] text-muted-foreground underline decoration-border underline-offset-2 hover:text-foreground hover:decoration-foreground">
-                      {loc.url}
+                    <a href={place.url} target="_blank" rel="noreferrer" className="min-w-0 max-w-full break-all rounded-sm font-mono text-[11.5px] text-muted-foreground underline decoration-border underline-offset-2 hover:text-foreground hover:decoration-foreground">
+                      {place.url}
                     </a>
                   )
                 }

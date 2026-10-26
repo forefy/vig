@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useParams, useSearchParams } from 'react-router'
-import { hostOf, routeOf, shortRoute } from '@/lib/web'
+import { hostOf, placeOf, routeOf, shortRoute } from '@/lib/web'
 import { Helmet } from 'react-helmet-async'
 import { useQueryClient } from '@tanstack/react-query'
 import { ArrowRight, ChevronDown, ChevronRight, Download, Globe, GitCommitHorizontal } from 'lucide-react'
@@ -663,7 +663,7 @@ function facetsOf(findings: Finding[], words: ChainWords): Facet[] {
   // A file chip shows the base name. When base names collide across the
   // report, the nearest directory that differs is shown beside it, so five
   // lib.rs chips read as five packages rather than one word five times.
-  const files = [...new Set(findings.map((f) => f.location.file).filter(Boolean))]
+  const files = [...new Set(findings.map((f) => placeOf(f.location).file).filter(Boolean))]
   const fileWord = (p: string) => {
     const base = short(p)
     const twins = files.filter((o) => o !== p && short(o) === base)
@@ -683,10 +683,10 @@ function facetsOf(findings: Finding[], words: ChainWords): Facet[] {
     facet('tool', 'tool', (f) => f.evidence?.tool ?? 'none', (v) => v),
     // A web finding's place is its endpoint: the host and the route are
     // what the reader folds by, with ids folded out of the route.
-    facet(words.instruction, words.instruction, (f) => (words.web ? routeOf(f.location.url) : f.location.instruction ?? 'none'), (v) => (words.web ? shortRoute(v) : v)),
+    facet(words.instruction, words.instruction, (f) => (words.web ? routeOf(placeOf(f.location).url) : f.location.instruction ?? 'none'), (v) => (words.web ? shortRoute(v) : v)),
     ...(words.web ? [facet('method', 'method', (f) => methodOf(f), (v) => v)] : []),
-    facet('file', 'file', (f) => f.location.file || 'none', (v) => (v === 'none' ? 'no source' : fileWord(v))),
-    facet(words.program, words.program, (f) => (words.web ? hostOf(f.location.url) : f.location.program_id ?? 'none'), (v) => (words.web || v.length <= 12 ? v : `${v.slice(0, 6)}…${v.slice(-4)}`)),
+    facet('file', 'file', (f) => placeOf(f.location).file || 'none', (v) => (v === 'none' ? 'no source' : fileWord(v))),
+    facet(words.program, words.program, (f) => (words.web ? hostOf(placeOf(f.location).url) : f.location.program_id ?? 'none'), (v) => (words.web || v.length <= 12 ? v : `${v.slice(0, 6)}…${v.slice(-4)}`)),
     facet('sites', 'sites', (f) => ((f.sites ?? []).length > 0 ? 'several' : 'one'), (v) => v, ['one', 'several']),
     facet('exploit path', 'exploit path', (f) => (f.exploit_path || f.exploit_path_withheld ? 'yes' : 'no'), (v) => v, ['yes', 'no']),
   ].filter((g) => g.values.length > 1)
