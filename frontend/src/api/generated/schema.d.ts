@@ -4087,6 +4087,11 @@ export interface components {
             /** @description File name the reader saves a download as; required for files, ignored for images and videos */
             name?: string;
             /**
+             * @description proof: held as evidence that the method in evidence was run (the tool's screen, its output), kept with the finding and shown to operators and admins, never in the report
+             * @enum {string}
+             */
+            role?: "proof";
+            /**
              * Format: int64
              * @description Bytes, shown on a download
              */

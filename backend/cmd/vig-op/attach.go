@@ -32,12 +32,13 @@ func cmdAttach(w *workspace, args []string) error {
 	fs := flag.NewFlagSet("attach", flag.ContinueOnError)
 	into := fs.String("into", filepath.Join(w.Home, "findings.json"), "the findings document to write the reference into")
 	typ := fs.String("type", "", "override the detected content type, e.g. video/mp4")
+	proof := fs.Bool("proof", false, "hold it as proof of the method in evidence (the tool's screen, its output): kept with the finding, never shown in the report")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	rest := fs.Args()
 	if len(rest) != 3 {
-		return errors.New(`usage: vig-op attach [--into findings.json] [--type mime] <ordinal>[.<step>] <file> "<caption>"`)
+		return errors.New(`usage: vig-op attach [--into findings.json] [--type mime] [--proof] <ordinal>[.<step>] <file> "<caption>"`)
 	}
 	ordinal, step, err := parseRef(rest[0])
 	if err != nil {
@@ -102,7 +103,10 @@ func cmdAttach(w *workspace, args []string) error {
 		return err
 	}
 	v := out.Visual
-	fmt.Printf("stored     %s  %s  %s  %d bytes  sha256 %s\n", v.ID, v.Kind, v.Mime, v.Size, short(out.SHA256))
+	if *proof {
+		v.Role = core.VisualProof
+	}
+	fmt.Printf("stored     %s  %s  %s  %d bytes  sha256 %s%s\n", v.ID, v.Kind, v.Mime, v.Size, short(out.SHA256), map[bool]string{true: "  proof", false: ""}[*proof])
 	if at < 0 {
 		ref, _ := json.MarshalIndent(v, "", "  ")
 		where := "no " + *into + " yet"

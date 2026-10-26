@@ -16,6 +16,13 @@ func TestSeededReportsValidate(t *testing.T) {
 	} {
 		d := doc
 		d.Report.AuditID = "0199c0f0-0000-7000-8000-000000000000"
+		// The seed stores a proof capture for every finding whose evidence
+		// ran a tool before the report is stored; stand in for it here.
+		for i := range d.Findings {
+			if d.Findings[i].Evidence.Ran() != "" && d.Findings[i].Attached() == 0 {
+				d.Findings[i].Visuals = append(d.Findings[i].Visuals, core.Visual{ID: "0199c0f0-0000-7000-8000-00000000ffff", Caption: "the tool's screen", Mime: "image/png", Role: core.VisualProof})
+			}
+		}
 		if err := d.Validate(); err != nil {
 			t.Errorf("%s: %v", name, err)
 		}

@@ -30,7 +30,7 @@ const usage = `vig-op - operator CLI (runs only inside the audit sandbox)
   vig-op event <state>               advance: cloning | programs_verified | analysis | human_review | delivered
   vig-op report [--check] <findings.json>
                                      validate against the findings schema, print advice, submit (--check: stop before)
-  vig-op attach <n>[.<step>] <file> "<caption>"
+  vig-op attach [--proof] <n>[.<step>] <file> "<caption>"
                                      upload a capture, recording (mp4, webm) or file for finding n, or for
                                      one of its flow steps, and write the reference into findings.json
   vig-op delay <duration> <reason>   push the ETA (e.g. 12h "queue over capacity")

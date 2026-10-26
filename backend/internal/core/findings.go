@@ -213,7 +213,15 @@ type Visual struct {
 	Mime    string     `json:"mime" minLength:"3" maxLength:"100" doc:"image/png, image/jpeg, image/webp and image/gif render as pictures; video/mp4 and video/webm as a player; any other type is a download"`
 	Name    string     `json:"name,omitempty" maxLength:"120" doc:"File name the reader saves a download as; required for files, ignored for images and videos"`
 	Size    int64      `json:"size,omitempty" minimum:"0" doc:"Bytes, shown on a download"`
+	Role    VisualRole `json:"role,omitempty" enum:"proof" doc:"proof: held as evidence that the method in evidence was run (the tool's screen, its output), kept with the finding and shown to operators and admins, never in the report"`
 }
+
+// VisualRole says what an attachment is for. Empty is the default: shown
+// in the report where it sits.
+type VisualRole string
+
+// VisualProof is kept as evidence of the method, not shown to the reader.
+const VisualProof VisualRole = "proof"
 
 var mimeRE = regexp.MustCompile(`^[a-z0-9][a-z0-9!#$&^_.+-]*/[a-z0-9][a-z0-9!#$&^_.+-]*$`)
 
@@ -259,6 +267,9 @@ func (v *Visual) Normalize() error {
 	kind := VisualKindOf(v.Mime)
 	if v.Kind != "" && v.Kind != kind {
 		return fmt.Errorf("kind %q does not match mime %q", v.Kind, v.Mime)
+	}
+	if v.Role != "" && v.Role != VisualProof {
+		return fmt.Errorf("role %q is not proof", v.Role)
 	}
 	v.Kind = kind
 	if kind == VisualFile {
@@ -322,6 +333,87 @@ type Evidence struct {
 	Kind     EvidenceKind `json:"kind" enum:"static,fuzz,onchain,bytecode,live"`
 	Tool     string       `json:"tool,omitempty" doc:"What produced the artifact, e.g. trident" maxLength:"60"`
 	Artifact string       `json:"artifact,omitempty" doc:"Crash input hash, transaction signature, offset or harness name" maxLength:"200"`
+}
+
+// Ran names what the evidence claims was executed, or nothing for a
+// static reading with no tool: "burp", "fuzzing with trident", "a live
+// probe", "an on-chain read". What ran can be shown; what was read cannot.
+func (e *Evidence) Ran() string {
+	if e == nil {
+		return ""
+	}
+	tool := strings.TrimSpace(e.Tool)
+	switch e.Kind {
+	case EvidenceFuzz:
+		if tool != "" {
+			return "fuzzing with " + tool
+		}
+		return "fuzzing"
+	case EvidenceLive:
+		if tool != "" {
+			return "a live probe with " + tool
+		}
+		return "a live probe"
+	case EvidenceOnChain:
+		if tool != "" {
+			return "an on-chain read with " + tool
+		}
+		return "an on-chain read"
+	}
+	if tool != "" {
+		return tool
+	}
+	return ""
+}
+
+// Attached counts the finding's attachments, on itself and on its steps.
+func (f Finding) Attached() int {
+	n := len(f.Visuals)
+	for _, st := range f.Sites {
+		n += len(st.Visuals)
+	}
+	return n
+}
+
+// WithoutProof drops the attachments held as proof of the method; the
+// report shows the rest.
+func (f Finding) WithoutProof() Finding {
+	keep := func(vs []Visual) []Visual {
+		if len(vs) == 0 {
+			return vs
+		}
+		out := make([]Visual, 0, len(vs))
+		for _, v := range vs {
+			if v.Role != VisualProof {
+				out = append(out, v)
+			}
+		}
+		if len(out) == 0 {
+			return nil
+		}
+		return out
+	}
+	f.Visuals = keep(f.Visuals)
+	if len(f.Sites) > 0 {
+		sites := make([]Site, len(f.Sites))
+		copy(sites, f.Sites)
+		for i := range sites {
+			sites[i].Visuals = keep(sites[i].Visuals)
+		}
+		f.Sites = sites
+	}
+	return f
+}
+
+// WithoutProof is the document as the report shows it: proof attachments
+// stay with the stored finding and leave the page.
+func (d FindingsDocument) WithoutProof() FindingsDocument {
+	out := d
+	out.Findings = make([]Finding, len(d.Findings))
+	for i, f := range d.Findings {
+		out.Findings[i] = f.WithoutProof()
+	}
+	return out
 }
 
 // Methods records how a report was produced. Every flag is a fact the
@@ -518,6 +610,13 @@ func (d *FindingsDocument) Validate() error {
 		}
 		if videos > 1 {
 			errs = append(errs, fmt.Sprintf("findings[%d] carries %d recordings; one per finding, across its steps and its own attachments", i, videos))
+		}
+		// A method that ran leaves something behind: the tool's screen, its
+		// output, a recording. Evidence that names a tool, or says the
+		// target was probed, fuzzed or read on chain, has to come with it;
+		// a static reading needs nothing.
+		if claim := f.Evidence.Ran(); claim != "" && f.Attached() == 0 {
+			errs = append(errs, fmt.Sprintf("findings[%d]: evidence says %s but nothing is attached; attach the capture that proves it (role proof keeps it out of the report)", i, claim))
 		}
 		for j := range f.Sites {
 			if len(f.Sites[j].Visuals) > 1 {
@@ -806,13 +905,14 @@ func DescribeShape(pin Pin) Shape {
 	return Shape{
 		Chain:       []string{"normal_use", "expected", "location + sites (flow: ordered steps)", "impact"},
 		Required:    []string{"ordinal", "severity", "title", "location.file", "location.line_start", "description", "fix"},
-		Recommended: []string{"normal_use", "expected", "impact", "exploitable_by", "evidence", "sites_kind + sites (critical and high)", "sites[].note", "a fenced patch in fix with its place (```rust path:start-end)", "visuals (one capture or file per step, the script and one recording on the finding)"},
+		Recommended: []string{"normal_use", "expected", "impact", "exploitable_by", "evidence", "sites_kind + sites (critical and high)", "sites[].note", "a fenced patch in fix with its place (```rust path:start-end)", "visuals (one capture or file per step, the script and one recording on the finding; a role proof capture of every tool evidence names)"},
 		Optional:    []string{"exploit_path (owners only)", "references", "status", "carried_from_id", "report.pin.excluded", "report.known", "report.methods"},
 		Rules: []string{
 			"prose: paragraphs under 600 characters, blank lines between them, '- ' bullets, backticks for identifiers, ``` fences for code (under 2000 characters)",
 			"fix: every line a '- ' bullet; a fence right after a bullet is its definite code; a fence place is path:line or path:start-end",
 			"sites: sites_kind is flow or occurrences; each site has file and line_start; at most one attachment per site",
 			"visuals: ids come from the upload endpoint for this audit; mime, name and size are rebound from the stored bytes; one recording per finding",
+			"evidence that names a tool, or says live, fuzz or onchain, needs an attachment on the finding or a step: the tool's screen or output; role proof keeps it out of the report (vig-op attach --proof)",
 			"report.pin must match the audited repo and commit; the summary is recomputed",
 		},
 		Example: ExampleDocument(pin),
@@ -906,10 +1006,7 @@ func (d *FindingsDocument) Advise() []string {
 		} else if len(FixLocations(f.Fix)) == 0 {
 			say(f, "fix fences name no place; put path:start-end on the fence line so it renders as a patch against those lines")
 		}
-		attached := len(f.Visuals)
-		for _, st := range f.Sites {
-			attached += len(st.Visuals)
-		}
+		attached := f.Attached()
 		if attached == 0 && (f.Severity == SeverityCritical || f.Severity == SeverityHigh) {
 			say(f, "no attachments; a capture or recording of the PoC and the script that ran it make it reproducible")
 		}

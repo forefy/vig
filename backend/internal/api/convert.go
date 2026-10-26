@@ -114,7 +114,7 @@ func (d *Deps) auditWithEvents(ctx context.Context, a store.Audit) (Audit, error
 }
 
 func toReport(r store.Report, isOwner bool) Report {
-	doc := r.Document().ForViewer(isOwner)
+	doc := r.Document().ForViewer(isOwner).WithoutProof()
 	for i := range doc.Findings {
 		doc.Findings[i].ID = r.Findings[i].ID
 	}
