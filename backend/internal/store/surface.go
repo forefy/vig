@@ -172,12 +172,7 @@ func (s *Store) SetSurfaceError(ctx context.Context, auditID, msg string) error 
 	return err
 }
 
-// ListSurfaceAudits returns the audits that have a map, newest first; a
-// user id limits them to that owner's, an empty one takes every audit.
+// ListSurfaceAudits returns the owner's audits that have a map, newest first.
 func (s *Store) ListSurfaceAudits(ctx context.Context, userID string) ([]Audit, error) {
-	where := `where a.hidden_at is null and exists (select 1 from audit_surfaces s where s.audit_id=a.id) order by a.created_at desc`
-	if userID != "" {
-		return s.listAudits(ctx, `where a.user_id=$1 and a.hidden_at is null and exists (select 1 from audit_surfaces s where s.audit_id=a.id) order by a.created_at desc`, userID)
-	}
-	return s.listAudits(ctx, where)
+	return s.listAudits(ctx, `where a.user_id=$1 and a.hidden_at is null and exists (select 1 from audit_surfaces s where s.audit_id=a.id) order by a.created_at desc`, userID)
 }

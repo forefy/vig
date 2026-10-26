@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef, useState } from 'react'
 import { Link } from 'react-router'
 import { ArrowRight } from 'lucide-react'
-import { Mark } from '@/components/primitives'
+import { Mark, Spark } from '@/components/primitives'
 import { Seo } from '@/components/primitives/Seo'
 import { useMe } from '@/features/auth/useMe'
 import { ScanForm } from '@/features/scan/ScanForm'
@@ -67,9 +67,17 @@ export function Landing() {
           <span data-solid className="w-full max-w-[600px]">
             <ScanForm />
           </span>
-          <Link data-solid to={me ? '/app' : '/login'} className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
-            {me ? 'Open dashboard' : 'Sign in'} <ArrowRight className="size-3.5" />
-          </Link>
+          {me ? (
+            <Link data-solid to="/app" className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+              Open dashboard <ArrowRight className="size-3.5" />
+            </Link>
+          ) : (
+            <Spark id="sign-in" data-solid>
+              <Link to="/login" className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+                Sign in <ArrowRight className="size-3.5" />
+              </Link>
+            </Spark>
+          )}
         </div>
       </section>
 

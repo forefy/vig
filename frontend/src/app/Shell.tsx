@@ -14,7 +14,7 @@ import { ViewingAs } from './ViewingAs'
 const nav = [
   { to: '/app', label: 'Dashboard', icon: LayoutGrid, end: true },
   { to: '/app/audits', label: 'Audits', icon: ListChecks },
-  { to: '/app/surface', label: 'Surface', icon: Radar },
+  { to: '/app/atlas', label: 'Atlas', icon: Radar },
   { to: '/app/settings', label: 'Settings', icon: Settings },
 ]
 

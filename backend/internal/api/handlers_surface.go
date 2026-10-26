@@ -72,7 +72,6 @@ const (
 
 func (d *Deps) registerSurface(api huma.API) {
 	huma.Register(api, withAuth(op("getSurfaceIndex", http.MethodGet, "/v1/surface", "Every node across the user's maps, with its audit, attention and findings", "audits"), userAuth), d.getSurfaceIndex)
-	huma.Register(api, withAuth(op("adminGetSurfaceIndex", http.MethodGet, "/v1/admin/surface", "Every node across every audit's map", "admin"), adminAuth), d.adminGetSurfaceIndex)
 	huma.Register(api, withAuth(op("getAuditSurface", http.MethodGet, "/v1/audits/{id}/surface", "Surface map with attention", "audits"), userAuth), d.getAuditSurface)
 	huma.Register(api, withAuth(op("adminGetAuditSurface", http.MethodGet, "/v1/admin/audits/{id}/surface", "Any audit's surface map", "admin"), adminAuth), d.adminGetAuditSurface)
 	huma.Register(api, withAuth(op("getJobSurface", http.MethodGet, "/v1/op/jobs/{id}/surface", "The job's surface map", "operator"), operatorAuth), d.getJobSurface)
@@ -186,18 +185,6 @@ func (d *Deps) getSurfaceIndex(ctx context.Context, _ *struct{}) (*body[core.Sur
 		return nil, err
 	}
 	audits, err := d.Store.ListSurfaceAudits(ctx, u.ID)
-	if err != nil {
-		return nil, fail(err)
-	}
-	idx, err := d.surfaceIndex(ctx, audits)
-	if err != nil {
-		return nil, fail(err)
-	}
-	return &body[core.SurfaceIndex]{Body: idx}, nil
-}
-
-func (d *Deps) adminGetSurfaceIndex(ctx context.Context, _ *struct{}) (*body[core.SurfaceIndex], error) {
-	audits, err := d.Store.ListSurfaceAudits(ctx, "")
 	if err != nil {
 		return nil, fail(err)
 	}

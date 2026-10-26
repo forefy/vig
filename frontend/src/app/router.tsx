@@ -15,7 +15,7 @@ const audits = () => import('@/features/audits/AuditsList')
 const auditDetail = () => import('@/features/audits/AuditDetail')
 const newAudit = () => import('@/features/audits/NewAudit')
 const report = () => import('@/features/audits/Report')
-const surface = () => import('@/features/surface/SurfaceIndex')
+const atlas = () => import('@/features/atlas/Atlas')
 const billing = () => import('@/features/billing/Billing')
 const settings = () => import('@/features/settings/Settings')
 const panels = () => import('@/features/settings/Panels')
@@ -42,7 +42,7 @@ export const routes = [
               { path: '/app/audits/:id', element: lazyRoute(auditDetail, 'AuditDetail') },
               { path: '/app/audits/:id/surface', element: lazyRoute(auditDetail, 'AuditSurfaceView') },
               { path: '/app/audits/:id/report', element: lazyRoute(report, 'ReportPage') },
-              { path: '/app/surface', element: lazyRoute(surface, 'SurfaceIndex') },
+              { path: '/app/atlas', element: lazyRoute(atlas, 'Atlas') },
               {
                 element: <WalletGate />,
                 children: [
@@ -79,7 +79,6 @@ export const routes = [
                       { path: 'users/:id', element: lazyRoute(admin, 'AdminUserDetail') },
                       { path: 'actions', element: lazyRoute(admin, 'AdminActions') },
                       { path: 'lessons', element: lazyRoute(admin, 'AdminLessons') },
-                      { path: 'surface', element: lazyRoute(surface, 'AdminSurfaceIndex') },
                     ],
                   },
                 ],

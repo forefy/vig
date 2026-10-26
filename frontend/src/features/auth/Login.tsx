@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router'
 import { Helmet } from 'react-helmet-async'
-import { Mark } from '@/components/primitives'
+import { Mark, Spark } from '@/components/primitives'
 import { Button } from '@/components/ui/button'
 import { queryClient } from '@/app/queryClient'
 import { useMe } from './useMe'
@@ -64,9 +64,11 @@ function DevLogins({ next }: { next: string }) {
     <div className="flex items-center gap-3 rounded-md border border-dashed border-border px-3 py-1.5">
       <span className="label-caps">dev</span>
       {['admin'].map((u) => (
-        <a key={u} href={`${apiBase}/v1/auth/dev/login?user=${u}&next=${encodeURIComponent(next)}`} className="font-mono text-xs text-muted-foreground hover:text-foreground">
-          {u}
-        </a>
+        <Spark key={u} id={`dev-login-${u}`}>
+          <a href={`${apiBase}/v1/auth/dev/login?user=${u}&next=${encodeURIComponent(next)}`} className="font-mono text-xs text-muted-foreground hover:text-foreground">
+            {u}
+          </a>
+        </Spark>
       ))}
     </div>
   )

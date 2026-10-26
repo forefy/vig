@@ -1,4 +1,5 @@
 export { Mark } from './Mark'
+export { Spark } from './Spark'
 export { StateBadge, severityState, severityInk, severityDot, auditState } from './StateBadge'
 export type { BadgeState, BadgeTone, Severity } from './StateBadge'
 export { Meter } from './Meter'

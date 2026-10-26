@@ -4,7 +4,7 @@ import { ArrowRight } from 'lucide-react'
 import { $api } from '@/api/hooks'
 import { Page, PageHeader } from '@/app/Shell'
 import { Loading } from '@/features/auth/guards'
-import { StateBadge, auditState, stageWord, Timeline, Stat } from '@/components/primitives'
+import { StateBadge, auditState, stageWord, Timeline, Stat, Spark } from '@/components/primitives'
 import { Button } from '@/components/ui/button'
 import { ProblemBadge } from '@/components/ui/states'
 import { countdown, relTime, short, cn } from '@/lib/utils'
@@ -105,9 +105,11 @@ export function AuditDetail({ view = 'timeline' }: { view?: 'timeline' | 'surfac
         className="mb-8"
         aside={
           a.report_id ? (
-            <Button size="sm" render={<Link to={`/app/audits/${a.id}/report`} />}>
-              Report <ArrowRight className="size-4" />
-            </Button>
+            <Spark id="report">
+              <Button size="sm" render={<Link to={`/app/audits/${a.id}/report`} />}>
+                Report <ArrowRight className="size-4" />
+              </Button>
+            </Spark>
           ) : undefined
         }
       />

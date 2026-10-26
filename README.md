@@ -83,7 +83,7 @@ Two reports of the same code by two different authors should disagree only where
 - **A chain per finding**: normal use, what the code must guarantee, the numbered steps that break it with their lines marked and a capture or recording on each, then impact with the finding's own attachments.
 - **History in place**: every re-rating and status move under its finding, and a folded changes log for the whole report.
 - **The surface**: a live map of the target drawn before anyone reads a line, programs, instructions and accounts for a chain, hosts, routes and parameters for a site, lit by traffic, by what was reviewed, and by the findings.
-- **The surface across audits**: every node of every map on one page, folded by the same query line (kind, attention, target, method, who signs, what carries a finding), with each node opening to its evidence and the audit it came from.
+- **Atlas**: every node of every audit's map on one page, folded by the same query line (kind, attention, target, method, who signs, what carries a finding), with each node opening to its evidence and the audit it came from.
 - **Operations**: the queue, every audit across users, re-rating and archiving as admin, bulk deletes, the action log, and the lessons across all repositories.
 
 ## Where findings come from

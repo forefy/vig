@@ -17,8 +17,8 @@ import type { IndexNode, IndexAudit } from './model'
 // Ledger archetype: the report's query line over every node of every
 // map, rows folded by target and by the place they hang under, a rail
 // with the rollups, and a sheet for one node with its evidence.
-export function SurfaceIndex({ admin = false }: { admin?: boolean }) {
-  const q = admin ? $api.useQuery('get', '/v1/admin/surface') : $api.useQuery('get', '/v1/surface')
+export function Atlas() {
+  const q = $api.useQuery('get', '/v1/surface')
   const [params, setParams] = useSearchParams()
   const query = parseQuery(params.get('q') ?? '')
   const setQuery = (next: Query) => {
@@ -58,13 +58,12 @@ export function SurfaceIndex({ admin = false }: { admin?: boolean }) {
   const reached = all.filter(seen).length
   const reviewed = all.filter((n) => n.attention === 'reviewed').length
   const targets = new Set(audits.map((a) => a.repo)).size
-  const base = admin ? '/admin/audits' : '/app/audits'
 
   return (
     <Page wide>
-      <Helmet><title>Surface</title></Helmet>
+      <Helmet><title>Atlas</title></Helmet>
       <PageHeader
-        eyebrow="surface"
+        eyebrow="atlas"
         title="Across audits"
         aside={
           <div className="flex flex-wrap gap-2">
@@ -79,7 +78,7 @@ export function SurfaceIndex({ admin = false }: { admin?: boolean }) {
       />
       <div className="grid items-start gap-7 lg:grid-cols-[minmax(0,1fr)_300px]">
         <div className="min-w-0">
-          {all.length > 0 && <QueryLine facets={facets} all={all} query={query} onChange={setQuery} shown={live.length} total={all.length} textOf={nodeText} textLabel="name" placeholder="kind = route" ariaLabel="Filter the surface" />}
+          {all.length > 0 && <QueryLine facets={facets} all={all} query={query} onChange={setQuery} shown={live.length} total={all.length} textOf={nodeText} textLabel="name" placeholder="kind = route" ariaLabel="Filter the atlas" />}
           {order.length === 0 && <StateBadge state="pending" className="mt-6 h-6 w-fit px-2 text-[11px]">{all.length === 0 ? 'no map yet' : 'nothing on the surface matches'}</StateBadge>}
           {order.map((a) => {
             const w = words(a.id)
@@ -120,13 +119,9 @@ export function SurfaceIndex({ admin = false }: { admin?: boolean }) {
         </div>
         <Rail live={live} all={all} audits={audits} onFacet={(facet, value) => setQuery({ items: [...query.items, { facet, op: '=', value }], conns: query.items.length ? [...query.conns, 'and'] : [] })} />
       </div>
-      <NodeSheet node={open} audit={open ? audits.find((a) => a.id === open.audit_id) : undefined} under={open ? (under.get(key(open)) ?? []) : []} admin={admin} onClose={() => setOpen(null)} />
+      <NodeSheet node={open} audit={open ? audits.find((a) => a.id === open.audit_id) : undefined} under={open ? (under.get(key(open)) ?? []) : []} onClose={() => setOpen(null)} />
     </Page>
   )
-}
-
-export function AdminSurfaceIndex() {
-  return <SurfaceIndex admin />
 }
 
 const maxOf = (all: IndexNode[], n: IndexNode) => Math.max(1, ...all.filter((x) => x.audit_id === n.audit_id && x.kind === n.kind).map((x) => (x.ok ?? 0) + (x.failed ?? 0)))
@@ -207,11 +202,9 @@ function Rail({ live, all, audits, onFacet }: { live: IndexNode[]; all: IndexNod
   )
 }
 
-function NodeSheet({ node, audit, under, admin, onClose }: { node: IndexNode | null; audit?: IndexAudit; under: IndexNode[]; admin: boolean; onClose: () => void }) {
+function NodeSheet({ node, audit, under, onClose }: { node: IndexNode | null; audit?: IndexAudit; under: IndexNode[]; onClose: () => void }) {
   const id = node?.audit_id ?? ''
-  const view = admin
-    ? $api.useQuery('get', '/v1/admin/audits/{id}/surface', { params: { path: { id } } }, { enabled: !!node })
-    : $api.useQuery('get', '/v1/audits/{id}/surface', { params: { path: { id } } }, { enabled: !!node })
+  const view = $api.useQuery('get', '/v1/audits/{id}/surface', { params: { path: { id } } }, { enabled: !!node })
   const evidence = node ? (view.data?.evidence ?? []).filter((e) => e.node_id === node.id).slice(0, 8) : []
   const w = node && audit ? wordsFor([audit])(audit.id) : undefined
   const subs = under.filter((k) => UNDER.has(k.kind))
@@ -249,7 +242,7 @@ function NodeSheet({ node, audit, under, admin, onClose }: { node: IndexNode | n
               <div>
                 <span className="label-caps">findings here</span>
                 {(node.findings ?? []).map((f) => (
-                  <Link key={f.ordinal} to={`${base(admin)}/${audit.id}/report#f-${f.ordinal}`} className="flex items-center gap-2 border-t border-border py-1.5 text-[13px] hover:underline">
+                  <Link key={f.ordinal} to={`${base}/${audit.id}/report#f-${f.ordinal}`} className="flex items-center gap-2 border-t border-border py-1.5 text-[13px] hover:underline">
                     <StateBadge state={severityState[f.severity]} className="h-5 px-1.5 text-[10.5px]">#{String(f.ordinal).padStart(2, '0')} {f.severity}</StateBadge>
                     <span className="min-w-0 truncate">{f.title}</span>
                     <span className="ml-auto font-mono text-[11px] text-muted-foreground">{f.status}</span>
@@ -272,7 +265,7 @@ function NodeSheet({ node, audit, under, admin, onClose }: { node: IndexNode | n
                 )
               })}
             </div>
-            <Link to={`${base(admin)}/${audit.id}/surface#n-${encodeURIComponent(node.id)}`} className="inline-flex h-7 w-fit items-center gap-1 rounded-md border border-border px-2.5 font-mono text-[11.5px] hover:border-primary">open in the audit's map <ArrowUpRight className="size-3.5" /></Link>
+            <Link to={`${base}/${audit.id}/surface#n-${encodeURIComponent(node.id)}`} className="inline-flex h-7 w-fit items-center gap-1 rounded-md border border-border px-2.5 font-mono text-[11.5px] hover:border-primary">open in the audit's map <ArrowUpRight className="size-3.5" /></Link>
           </div>
         )}
       </SheetContent>
@@ -280,7 +273,7 @@ function NodeSheet({ node, audit, under, admin, onClose }: { node: IndexNode | n
   )
 }
 
-const base = (admin: boolean) => (admin ? '/admin/audits' : '/app/audits')
+const base = '/app/audits'
 
 function Fragment2({ k, v }: { k: string; v: string }) {
   return (
