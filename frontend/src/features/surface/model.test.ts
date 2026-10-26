@@ -18,3 +18,21 @@ describe('nodeFacets', () => {
     expect(f.target).toBeUndefined()
   })
 })
+
+describe('factFacets', () => {
+  it('offers every recorded fact as a facet, split on commas, and leaves names alone', () => {
+    const rows = [
+      { audit_id: 'a', id: 'r1', kind: 'route', name: '/a', source: 'traffic', attention: 'observed', observed: 1, facts: { host: 'h', path: '/a', methods: 'GET, POST', status: '200, 401', auth: 'bearer' } },
+      { audit_id: 'a', id: 'r2', kind: 'route', name: '/b', source: 'traffic', attention: 'observed', observed: 1, facts: { host: 'h', path: '/b', status: '500', auth: 'none' } },
+      { audit_id: 'a', id: 'p1', parent: 'r1', kind: 'param', name: 'id', source: 'traffic', attention: 'unseen', observed: 0, facts: { in: 'query', type: 'uuid', example: '0197', reflected: 'true' } },
+    ] as IndexNode[]
+    const f = Object.fromEntries(nodeFacets(rows, audits).map((g) => [g.key, g.values.map((v) => `${v.value}:${v.n}`)]))
+    expect(f.status).toEqual(['200:1', '401:1', '500:1'])
+    expect(f.auth).toEqual(['bearer:1', 'none:1'])
+    expect(f.method).toEqual(['GET:1', 'POST:1'])
+    expect(f.host).toBeUndefined()
+    expect(f.example).toBeUndefined()
+    expect(f.type).toEqual(['uuid:1'])
+    expect(f.reflected).toEqual(['true:1'])
+  })
+})

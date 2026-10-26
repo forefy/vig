@@ -196,6 +196,7 @@ func ledgerlySurface(findings []core.Finding, now time.Time) (core.Surface, []co
 		{api, "/api/v1/export", []string{"GET"}, []string{"from", "to", "format"}, nil, 21, 0, 1900},
 	}
 	s := core.Surface{Adapter: "webapp", BuiltAt: now, Sampling: &core.Sampling{Transactions: 0}}
+	facts := core.NewWebFacts()
 	for _, h := range ledgerlyHosts {
 		s.Nodes = append(s.Nodes, core.SurfaceNode{ID: core.WebHostID(h), Kind: "host", Name: h, Source: "traffic", Facts: map[string]string{"host": h}})
 	}
@@ -229,11 +230,13 @@ func ledgerlySurface(findings []core.Finding, now time.Time) (core.Surface, []co
 				}
 			}
 			method := r.methods[i%len(r.methods)]
+			facts.Observe(id, ledgerlyRequest(r.host, r.path, method, status, r.query, r.body, i))
 			ref := "https://" + r.host + strings.ReplaceAll(r.path, "{id}", itoa(10200+i))
 			ev = append(ev, core.SurfaceEvidence{NodeID: id, Kind: "request", Ref: ref, Actor: "operator", At: &at,
 				Summary: map[string]any{"method": method, "path": r.path, "status": status, "ms": r.ms + (i*37)%40, "count": r.requests}})
 		}
 	}
+	facts.ApplyAll(s.Nodes)
 	// The operator looked at the routes the findings name, and a few more.
 	for _, path := range []string{"/api/v1/invoices/{id}", "/api/v1/me", "/api/v1/auth/login", "/api/v1/members/{id}", "/api/v1/export"} {
 		at := now.Add(-26 * time.Hour)
@@ -252,4 +255,90 @@ func ledgerlySurface(findings []core.Finding, now time.Time) (core.Surface, []co
 	// did not reach.
 	s.Enrich(core.WebNodes(findings), nil)
 	return s, ev
+}
+
+// ledgerlyRequest is one sampled request of the demo site, shaped the way
+// a capture would show it: the app takes a session cookie, the API a
+// bearer, the public routes nothing; invoice and search responses echo
+// what was asked.
+func ledgerlyRequest(host, path, method string, status int, query, body []string, i int) core.WebRequest {
+	r := core.WebRequest{Method: method, Status: status, Mime: "text/html; charset=utf-8", Headers: map[string]string{"Accept-Language": "en"}}
+	api := strings.HasPrefix(path, "/api/")
+	public := path == "/" || path == "/login" || path == "/signup" || path == "/status" || path == "/status/search" || strings.HasPrefix(path, "/reset") || path == "/api/v1/auth/login"
+	if api {
+		r.Mime = "application/json"
+		r.Headers["X-Request-Id"] = "req-" + itoa(1000+i)
+	}
+	switch {
+	case public:
+	case api:
+		r.Headers["Authorization"] = "Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMDIwMSJ9.c2lnbmF0dXJl"
+	default:
+		r.Headers["Cookie"] = "ledgerly_session=s3ss10n"
+	}
+	if path == "/api/v1/auth/login" && status == 200 {
+		r.SetCookies = []string{"ledgerly_session"}
+	}
+	if path == "/api/v1/invoices/{id}/pdf" {
+		r.Mime = "application/pdf"
+	}
+	for _, q := range query {
+		r.Query = append(r.Query, core.KV{Name: q, Value: ledgerlyValue(q, i)})
+	}
+	if len(body) > 0 && method != "GET" && method != "DELETE" {
+		r.BodyMime = "application/json"
+		r.Body = map[string]any{}
+		for _, b := range body {
+			r.Body[b] = ledgerlyBody(b, i)
+		}
+	}
+	// What the response echoes: the invoice carries its customer, the
+	// status search its query.
+	switch path {
+	case "/api/v1/invoices/{id}", "/api/v1/invoices":
+		r.Response = `{"id":` + itoa(10200+i) + `,"customer_id":"` + ledgerlyValue("customer_id", i) + `","status":"` + ledgerlyValue("status", i) + `"}`
+	case "/status/search":
+		r.Response = "<h1>Results for " + ledgerlyValue("q", i) + "</h1>"
+	}
+	return r
+}
+
+func ledgerlyValue(name string, i int) string {
+	switch name {
+	case "status":
+		return []string{"open", "paid", "overdue"}[i%3]
+	case "page":
+		return itoa(1 + i%9)
+	case "q":
+		return "invoice " + itoa(10200+i)
+	case "customer_id":
+		return "0199c0de-0000-7000-8000-0000000" + itoa(100000 + i%40)[1:]
+	case "from", "to", "due_at":
+		return "2026-" + []string{"09", "10", "11"}[i%3] + "-" + itoa(10+i%18)
+	case "format":
+		return []string{"csv", "json"}[i%2]
+	case "email":
+		return "member" + itoa(i) + "@example.test"
+	case "name":
+		return []string{"Acme", "Northwind", "Globex"}[i%3]
+	case "timezone":
+		return "Europe/Berlin"
+	case "role":
+		return []string{"member", "admin"}[i%2]
+	case "vat":
+		return "DE" + itoa(100000000+i)
+	case "url":
+		return "https://hooks.example.test/" + itoa(i)
+	}
+	return "x"
+}
+
+func ledgerlyBody(name string, i int) any {
+	switch name {
+	case "lines", "events":
+		return []any{}
+	case "password":
+		return "hunter2"
+	}
+	return ledgerlyValue(name, i)
 }

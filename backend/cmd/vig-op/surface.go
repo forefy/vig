@@ -315,7 +315,8 @@ func cmdHAR(w *workspace, args []string) error {
 						Value string `json:"value"`
 					} `json:"headers"`
 					QueryString []struct {
-						Name string `json:"name"`
+						Name  string `json:"name"`
+						Value string `json:"value"`
 					} `json:"queryString"`
 					PostData *struct {
 						MimeType string `json:"mimeType"`
@@ -324,9 +325,14 @@ func cmdHAR(w *workspace, args []string) error {
 				} `json:"request"`
 				Response struct {
 					Status  int `json:"status"`
+					Headers []struct {
+						Name  string `json:"name"`
+						Value string `json:"value"`
+					} `json:"headers"`
 					Content struct {
 						MimeType string `json:"mimeType"`
 						Size     int    `json:"size"`
+						Text     string `json:"text"`
 					} `json:"content"`
 				} `json:"response"`
 			} `json:"entries"`
@@ -343,7 +349,9 @@ func cmdHAR(w *workspace, args []string) error {
 			order = append(order, n.ID)
 		}
 	}
-	methods := map[string]map[string]bool{}
+	// What the traffic says about each route and parameter: methods, the
+	// statuses answered, the auth taken, value shapes, reflection.
+	facts := core.NewWebFacts()
 	nav := map[[2]string]int{}
 	var navOrder [][2]string
 	// place puts a URL's host and route on the map and returns the route id.
@@ -368,21 +376,34 @@ func cmdHAR(w *workspace, args []string) error {
 			continue
 		}
 		routeID := place(u)
-		if methods[routeID] == nil {
-			methods[routeID] = map[string]bool{}
+		req := core.WebRequest{Method: e.Request.Method, Status: e.Response.Status, Mime: e.Response.Content.MimeType, Headers: map[string]string{}, Response: e.Response.Content.Text}
+		for _, h := range e.Request.Headers {
+			req.Headers[h.Name] = h.Value
 		}
-		methods[routeID][e.Request.Method] = true
-		for _, q := range e.Request.QueryString {
-			add(core.SurfaceNode{ID: core.WebParamID(routeID, "query", q.Name), Parent: routeID, Kind: "param", Name: q.Name, Facts: map[string]string{"in": "query"}})
-		}
-		if e.Request.PostData != nil && strings.Contains(e.Request.PostData.MimeType, "json") {
-			var body map[string]any
-			if json.Unmarshal([]byte(e.Request.PostData.Text), &body) == nil {
-				for k := range body {
-					add(core.SurfaceNode{ID: core.WebParamID(routeID, "body", k), Parent: routeID, Kind: "param", Name: k, Facts: map[string]string{"in": "body"}})
+		for _, h := range e.Response.Headers {
+			if strings.EqualFold(h.Name, "set-cookie") {
+				if name, _, ok := strings.Cut(h.Value, "="); ok {
+					req.SetCookies = append(req.SetCookies, strings.TrimSpace(name))
 				}
 			}
 		}
+		for _, q := range e.Request.QueryString {
+			add(core.SurfaceNode{ID: core.WebParamID(routeID, "query", q.Name), Parent: routeID, Kind: "param", Name: q.Name, Facts: map[string]string{"in": "query"}})
+			req.Query = append(req.Query, core.KV{Name: q.Name, Value: q.Value})
+		}
+		if e.Request.PostData != nil {
+			req.BodyMime = e.Request.PostData.MimeType
+			if strings.Contains(e.Request.PostData.MimeType, "json") {
+				var body map[string]any
+				if json.Unmarshal([]byte(e.Request.PostData.Text), &body) == nil {
+					for k := range body {
+						add(core.SurfaceNode{ID: core.WebParamID(routeID, "body", k), Parent: routeID, Kind: "param", Name: k, Facts: map[string]string{"in": "body"}})
+					}
+					req.Body = body
+				}
+			}
+		}
+		facts.Observe(routeID, req)
 		// The page that led here is a route too, and the step between
 		// them is how the site is walked.
 		for _, h := range e.Request.Headers {
@@ -419,14 +440,7 @@ func cmdHAR(w *workspace, args []string) error {
 		// The server stamps the source; the document still has to validate.
 		n.Source = "operator"
 		n.Attention = core.AttentionUnseen
-		if ms := methods[id]; len(ms) > 0 {
-			names := make([]string, 0, len(ms))
-			for m := range ms {
-				names = append(names, m)
-			}
-			sort.Strings(names)
-			n.Facts["methods"] = strings.Join(names, ", ")
-		}
+		facts.Apply(&n)
 		list = append(list, n)
 	}
 	var edges []core.SurfaceEdge

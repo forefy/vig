@@ -11,7 +11,7 @@ import { DepthMark } from '@/features/audits/surface/parts'
 import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet'
 import { SkeletonRows, ProblemBadge } from '@/components/ui/states'
 import { relTime, cn } from '@/lib/utils'
-import { PLACES, UNDER, key, seen, methodsOf, nodeText, nodeFacets, wordsFor } from './model'
+import { PLACES, UNDER, key, seen, methodsOf, factValues, nodeText, nodeFacets, wordsFor } from './model'
 import type { IndexNode, IndexAudit } from './model'
 
 // Ledger archetype: the report's query line over every node of every
@@ -153,7 +153,9 @@ function Row({ n, under, liveKeys, narrowing, words, max, selected, onOpen }: { 
         {methodsOf(n).map((m) => <StateBadge key={m} state="neutral" className="h-5 px-1.5 text-[10.5px]">{m}</StateBadge>)}
         {n.facts?.accounts && <StateBadge state="neutral" className="h-5 px-1.5 text-[10.5px] text-muted-foreground">{n.facts.accounts} {words.web ? 'parameters' : 'accounts'}</StateBadge>}
         {n.kind === 'route' && subs.length > 0 && <StateBadge state="neutral" className="h-5 px-1.5 text-[10.5px] text-muted-foreground">{subs.length} {accWord}</StateBadge>}
-        {hits.slice(0, 3).map((k) => <StateBadge key={k.id} state="ok" className="h-5 px-1.5 text-[10.5px]">{k.name}{k.facts?.in ? ` · ${k.facts.in}` : ''}{k.facts?.signer === 'true' ? ' · signer' : ''}{k.facts?.writable === 'true' ? ' · writable' : ''}</StateBadge>)}
+        {n.facts?.auth && <StateBadge state={n.facts.auth === 'none' ? 'warn' : 'neutral'} className="h-5 px-1.5 text-[10.5px]">{n.facts.auth}</StateBadge>}
+        {factValues(n.facts?.status).filter((c) => c >= '400').map((c) => <StateBadge key={c} state={c >= '500' ? 'bad' : 'neutral'} className="h-5 px-1.5 text-[10.5px]">{c}</StateBadge>)}
+        {hits.slice(0, 3).map((k) => <StateBadge key={k.id} state="ok" className="h-5 px-1.5 text-[10.5px]">{k.name}{k.facts?.in ? ` · ${k.facts.in}` : ''}{k.facts?.type ? ` · ${k.facts.type}` : ''}{k.facts?.reflected === 'true' ? ' · reflected' : ''}{k.facts?.signer === 'true' ? ' · signer' : ''}{k.facts?.writable === 'true' ? ' · writable' : ''}</StateBadge>)}
       </span>
       <span className="inline-flex items-center gap-1.5 font-mono text-[11px] text-muted-foreground">
         <span className="h-1 w-12 overflow-hidden rounded-sm bg-border"><span className="block h-full bg-ok" style={{ width: total ? `${Math.max(6, Math.round((100 * total) / max))}%` : '0%' }} /></span>
@@ -239,7 +241,7 @@ function NodeSheet({ node, audit, under, admin, onClose }: { node: IndexNode | n
               <div>
                 <span className="label-caps">{subs.length === 1 ? (node.kind === 'route' ? 'parameter' : 'account') : node.kind === 'route' ? 'parameters' : 'accounts'}</span>
                 <div className="mt-1.5 flex flex-wrap gap-1.5">
-                  {subs.map((k) => <StateBadge key={k.id} state={k.attention === 'finding' ? 'bad' : 'neutral'} className="h-[22px]">{k.name}{k.facts?.in ? <span className="ml-1 text-faint">{k.facts.in}</span> : null}{k.facts?.signer === 'true' ? <span className="ml-1 text-warn">signer</span> : null}{k.facts?.writable === 'true' ? <span className="ml-1 text-faint">writable</span> : null}</StateBadge>)}
+                  {subs.map((k) => <StateBadge key={k.id} state={k.attention === 'finding' ? 'bad' : 'neutral'} className="h-[22px]">{k.name}{k.facts?.in ? <span className="ml-1 text-faint">{k.facts.in}</span> : null}{k.facts?.type ? <span className="ml-1 text-faint">{k.facts.type}</span> : null}{k.facts?.reflected === 'true' ? <span className="ml-1 text-warn">reflected</span> : null}{k.facts?.signer === 'true' ? <span className="ml-1 text-warn">signer</span> : null}{k.facts?.writable === 'true' ? <span className="ml-1 text-faint">writable</span> : null}</StateBadge>)}
                 </div>
               </div>
             )}
