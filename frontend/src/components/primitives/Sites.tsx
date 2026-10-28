@@ -49,16 +49,22 @@ export function FindingCode({ finding, visualSrc, pin }: { finding: Finding; vis
     <div className="flex flex-col gap-2">
       {multi && (
         <div className="flex flex-wrap items-center gap-1" role="tablist">
-          {steps.map((st, i) => (
+          {steps.map((st, i) => {
+            // The step's words: its note, else its place. The open tab
+            // shows all of them, wrapping; the others are cut to a width
+            // and carry the whole text on hover.
+            const label = st.kind === 'code' ? st.site.note || placeOf(st.site.location).url || `${base(st.site.location.file)}:${st.site.location.line_start}` : st.kind === 'use' ? 'normal use' : st.kind
+            const caption = st.kind === 'code' ? st.site.visuals?.[0]?.caption : undefined
+            return (
             <span key={i} className="flex items-center gap-1">
               <button
                 type="button"
                 role="tab"
                 aria-selected={i === active}
                 onClick={() => setActive(i)}
-                title={st.kind === 'code' ? st.site.visuals?.[0]?.caption : undefined}
+                title={caption ? `${label}\n${caption}` : label}
                 className={cn(
-                  'flex h-7 items-center gap-2 rounded-md border px-2.5 font-mono text-[11px]',
+                  'flex min-h-7 items-center gap-2 rounded-md border px-2.5 py-1 text-left font-mono text-[11px]',
                   i === active ? 'border-border bg-secondary text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground',
                 )}
               >
@@ -66,18 +72,13 @@ export function FindingCode({ finding, visualSrc, pin }: { finding: Finding; vis
                 {st.kind === 'expected' && <Flag className={cn('size-3', i === active ? 'text-ok' : 'text-faint')} aria-hidden="true" />}
                 {st.kind === 'impact' && <Zap className={cn('size-3', i === active ? 'text-bad' : 'text-faint')} aria-hidden="true" />}
                 {st.kind === 'code' && flow && <span className={cn('num', i === active ? 'text-bad' : 'text-faint')}>{st.n}</span>}
-                {st.kind === 'code' ? (
-                  <>
-                    <span className="max-w-[22rem] truncate">{st.site.note || placeOf(st.site.location).url || `${base(st.site.location.file)}:${st.site.location.line_start}`}</span>
-                    {st.site.visuals?.[0] && <VisualMark visual={st.site.visuals[0]} className="text-faint" />}
-                  </>
-                ) : (
-                  <span>{st.kind === 'use' ? 'normal use' : st.kind}</span>
-                )}
+                <span className={cn('min-w-0', i === active ? 'whitespace-normal break-words' : 'max-w-[22rem] truncate')}>{label}</span>
+                {st.kind === 'code' && st.site.visuals?.[0] && <VisualMark visual={st.site.visuals[0]} className="shrink-0 text-faint" />}
               </button>
-              {flow && i < last && <ArrowRight className="size-3 text-faint" aria-hidden="true" />}
+              {flow && i < last && <ArrowRight className="size-3 shrink-0 text-faint" aria-hidden="true" />}
             </span>
-          ))}
+            )
+          })}
         </div>
       )}
       {/* The item's body: one bounded block carrying its mark. */}
