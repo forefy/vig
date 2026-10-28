@@ -455,6 +455,11 @@ func (d *Deps) adminReviseReport(ctx context.Context, in *adminReviseIn) (*body[
 		return nil, huma.Error422UnprocessableEntity(err.Error())
 	}
 	carryPostedIDs(doc.Findings)
+	// A finding new to this revision answers its exhaustion like a
+	// submitted one; a carried finding keeps what it had.
+	if open := doc.Unexhausted(true); len(open) > 0 {
+		return nil, huma.Error422UnprocessableEntity(strings.Join(open, "; "))
+	}
 	// A revision names new places in its fixes; capture their lines while
 	// the checkout is still around, as a submission does.
 	if d.GitHub != nil {

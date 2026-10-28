@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/danielgtaylor/huma/v2"
@@ -205,6 +206,9 @@ func (d *Deps) postJobReport(ctx context.Context, in *opReportIn) (*body[Report]
 	}
 	if err := doc.Validate(); err != nil {
 		return nil, huma.Error422UnprocessableEntity(err.Error())
+	}
+	if open := doc.Unexhausted(false); len(open) > 0 {
+		return nil, huma.Error422UnprocessableEntity(strings.Join(open, "; "))
 	}
 	if doc.Report.Pin.Repo != a.Repo || doc.Report.Pin.Commit != a.HeadSHA {
 		return nil, huma.Error422UnprocessableEntity("report.pin must match the audited repo and commit")

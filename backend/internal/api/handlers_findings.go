@@ -74,6 +74,7 @@ func (d *Deps) checkReport(ctx context.Context, auditID, repo, head string, doc 
 	if err := doc.Validate(); err != nil {
 		out.Errors = append(out.Errors, err.Error())
 	}
+	out.Errors = append(out.Errors, doc.Unexhausted(false)...)
 	if doc.Report.Pin.Repo != repo || doc.Report.Pin.Commit != head {
 		out.Errors = append(out.Errors, "report.pin must match the audited repo and commit")
 	}

@@ -8,7 +8,7 @@ import { $api } from '@/api/hooks'
 import { api } from '@/api/client'
 import { Page, PageHeader } from '@/app/Shell'
 import { Loading } from '@/features/auth/guards'
-import { Pin, StateBadge, severityState, severityInk, severityDot, MethodsStrip, EvidenceBadge, FindingCode, FactGroup, FactRow, Prose, Reference } from '@/components/primitives'
+import { Pin, StateBadge, severityState, severityInk, severityDot, MethodsStrip, EvidenceBadge, FindingCode, FactGroup, FactRow, Prose, Reference, ExhaustionDots, ExhaustionList } from '@/components/primitives'
 import { Button } from '@/components/ui/button'
 import { Switch } from '@/components/ui/switch'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
@@ -302,6 +302,8 @@ export function ReportBody({ report, onStatus, onSeverity, surfaceHref }: { repo
     ])
     .sort((a, b) => b.at.localeCompare(a.at))
   const [active, setActive] = useState<number | null>(all[0]?.ordinal ?? null)
+  // The finding whose exhaustion items are open under its header.
+  const [exhausted, setExhausted] = useState<number | null>(null)
   const stream = useRef<HTMLDivElement>(null)
 
   // The side index follows the reader: the topmost finding in view is active.
@@ -374,10 +376,7 @@ export function ReportBody({ report, onStatus, onSeverity, surfaceHref }: { repo
         )}
         {groups.map((g) => (
           <section key={g.s} className="flex flex-col gap-4">
-            <div className="flex items-center gap-3">
-              <StateBadge state={severityState[g.s]}>{g.s}</StateBadge>
-              <span className="num text-xs text-muted-foreground">{g.items.length}</span>
-            </div>
+            <StateBadge state={severityState[g.s]} className="self-start">{g.s}</StateBadge>
             {g.items.map((f) => (
               <article
                 key={f.id ?? f.ordinal}
@@ -443,6 +442,11 @@ export function ReportBody({ report, onStatus, onSeverity, surfaceHref }: { repo
                         </FactGroup>
                       )}
                       {f.carried_from_id && <StateBadge state="neutral" className="h-5 px-1.5 text-[10.5px]">carried</StateBadge>}
+                      {f.exhaustion && f.exhaustion.length > 0 && (
+                        <FactGroup label="ruled out" dense>
+                          <ExhaustionDots answers={f.exhaustion} open={exhausted === f.ordinal} onToggle={() => setExhausted(exhausted === f.ordinal ? null : f.ordinal)} />
+                        </FactGroup>
+                      )}
                     </div>
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
@@ -454,6 +458,7 @@ export function ReportBody({ report, onStatus, onSeverity, surfaceHref }: { repo
                     )}
                   </div>
                 </header>
+                {exhausted === f.ordinal && f.exhaustion && <ExhaustionList answers={f.exhaustion} />}
                 {/* Every re-rating, oldest first: what it was, what it became,
                     why, who, when. Append-only on the server; a revision that
                     rates differently is one more row here. */}

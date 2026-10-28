@@ -300,6 +300,7 @@ type Finding struct {
 	Fix                 string           `json:"fix" minLength:"1" doc:"Required. A '- ' bullet per change. A code fence (three backticks on their own line, closed the same way) right after a bullet carries the definite fix: the correct code, the exact header value, the configuration line. A fence whose info line names a place, like rust src/lib.rs:41-45, is shown as a patch replacing those lines (path:line alone inserts before it)"`
 	FixKind             FixKind          `json:"fix_kind,omitempty" enum:"code,operational" doc:"Optional. operational says there are no lines to patch (rotate, revoke, configure), so the dry run stops advising a placed fence for a finding that names a file"`
 	References          []string         `json:"references,omitempty" doc:"Optional."`
+	Exhaustion          []Exhaustion     `json:"exhaustion,omitempty" doc:"What the reproduction ruled out: one answer per item vig lists for this finding (the dry run prints them), done or not, with a note when not. Required on a submitted finding"`
 	ReferenceCode       []ReferenceCode  `json:"reference_code,omitempty" doc:"Set by the server: the lines each GitHub file link in references points at, read when the report was stored and pinned to their commit"`
 	Snippet             *Snippet         `json:"snippet,omitempty" doc:"The enclosing item at the location"`
 	SitesKind           SitesKind        `json:"sites_kind,omitempty" enum:"flow,occurrences" doc:"Recommended with sites. How the sites relate; required when sites are present"`
@@ -635,6 +636,7 @@ func (d *FindingsDocument) Validate() error {
 		// output, a recording. Evidence that names a tool, or says the
 		// target was probed, fuzzed or read on chain, has to come with it;
 		// a static reading needs nothing.
+		errs = append(errs, d.Findings[i].exhaustionErrors(i)...)
 		if claim := f.Evidence.Ran(); claim != "" && f.Attached() == 0 {
 			errs = append(errs, fmt.Sprintf("findings[%d]: evidence says %s but nothing is attached; attach the capture that proves it (role proof keeps it out of the report)", i, claim))
 		}
@@ -924,7 +926,7 @@ type Shape struct {
 func DescribeShape(pin Pin) Shape {
 	return Shape{
 		Chain:       []string{"normal_use", "expected", "location + sites (flow: ordered steps)", "impact"},
-		Required:    []string{"ordinal", "severity", "title", "location.file", "location.line_start", "description", "fix"},
+		Required:    []string{"ordinal", "severity", "title", "location.file", "location.line_start", "description", "fix", "exhaustion (one answer per item the dry run lists)"},
 		Recommended: []string{"normal_use", "expected", "impact", "exploitable_by", "evidence", "sites_kind + sites (critical and high)", "sites[].note", "a fenced patch in fix with its place (```rust path:start-end)", "visuals (one capture or file per step, the script and one recording on the finding; a role proof capture of every tool evidence names)"},
 		Optional:    []string{"exploit_path (owners only)", "references", "status", "carried_from_id", "report.pin.excluded", "report.known", "report.methods"},
 		Rules: []string{
@@ -933,6 +935,7 @@ func DescribeShape(pin Pin) Shape {
 			"sites: sites_kind is flow or occurrences; each site has file and line_start; at most one attachment per site",
 			"visuals: ids come from the upload endpoint for this audit; mime, name and size are rebound from the stored bytes; one recording per finding",
 			"evidence that names a tool, or says live, fuzz or onchain, needs an attachment on the finding or a step: the tool's screen or output; role proof keeps it out of the report (vig-op attach --proof)",
+			"exhaustion: vig lists five to ten things the reproduction had to rule out (the dry run prints them for each finding); answer every one with done true or false, a note when not done; the report shows them as a row of dots",
 			"report.pin must match the audited repo and commit; the summary is recomputed",
 		},
 		Example: ExampleDocument(pin),
@@ -954,7 +957,7 @@ func ExampleDocument(pin Pin) FindingsDocument {
 			Known:   []Known{},
 			Methods: &Methods{Static: true, Bytecode: false, OnChain: false, Fuzzing: &Fuzzing{Tool: "", Harnesses: 0, Runs: 0, Crashes: 0, DurationS: 0}},
 		},
-		Findings: []Finding{ExampleFinding()},
+		Findings: []Finding{exampleExhausted()},
 	}
 }
 
@@ -1030,6 +1033,17 @@ func (d *FindingsDocument) Advise() []string {
 		if attached == 0 && (f.Severity == SeverityCritical || f.Severity == SeverityHigh) {
 			say(f, "no attachments; a capture or recording of the PoC and the script that ran it make it reproducible")
 		}
+		if done, total := f.ExhaustionDone(); total == 0 {
+			say(f, "no exhaustion; answer the items the dry run lists, done or not, a note on each not done")
+		} else if done < total {
+			var open []string
+			for _, a := range f.Exhaustion {
+				if !a.Done {
+					open = append(open, a.Key)
+				}
+			}
+			say(f, fmt.Sprintf("exhaustion %d of %d; still open: %s", done, total, strings.Join(open, ", ")))
+		}
 		for _, raw := range f.References {
 			if link, ok := ParseBlobLink(raw); ok && !link.IsSHA() {
 				say(f, fmt.Sprintf("references a file on %s; its lines are read and the link pinned to that commit when the report is stored", link.Rev))
@@ -1040,4 +1054,13 @@ func (d *FindingsDocument) Advise() []string {
 		out = append(out, "report.methods missing; say how the report was produced")
 	}
 	return out
+}
+
+// exampleExhausted is the example finding with its exhaustion answered the
+// way a report should: every item, one left open with the reason.
+func exampleExhausted() Finding {
+	f := ExampleFinding()
+	AnswerAll(&f, true, "")
+	Answer(&f, "negative", false, "no fix deployed yet to re-test against")
+	return f
 }

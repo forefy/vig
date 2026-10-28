@@ -242,6 +242,9 @@ func cmdReport(w *workspace, args []string) error {
 	if err := doc.Validate(); err != nil {
 		return fmt.Errorf("findings.json is not a valid report: %w", err)
 	}
+	if open := doc.Unexhausted(false); len(open) > 0 {
+		return fmt.Errorf("findings.json is not a complete report:\n  %s", strings.Join(open, "\n  "))
+	}
 	// Locations must exist in the checkout; a typo here would ship a report
 	// pointing at nothing.
 	if _, err := os.Stat(w.srcDir()); err == nil {

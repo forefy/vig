@@ -366,6 +366,7 @@ func (sd *Seeder) Run(ctx context.Context) (Result, error) {
 			return store.Report{}, err
 		}
 		doc.Report.AuditID = a.ID
+		exhaustSeed(&doc)
 		if err := attachProofs(ctx, s, a.ID, &doc); err != nil {
 			return store.Report{}, err
 		}

@@ -2378,6 +2378,16 @@ export interface components {
             /** @description What produced the artifact, e.g. trident */
             tool?: string;
         };
+        Exhaustion: {
+            /** @description It was tried, to the end */
+            done: boolean;
+            /** @description One of the items vig lists for this finding (the dry run prints them) */
+            key: string;
+            /** @description What was tried, or why it was not; required when not done */
+            note?: string;
+            /** @description Set by the server: the item's words */
+            text?: string;
+        };
         FieldSpec: {
             key: string;
             /** @enum {string} */
@@ -2403,6 +2413,8 @@ export interface components {
             description: string;
             /** @description Recommended. What established the finding beyond reading the code */
             evidence?: components["schemas"]["Evidence"];
+            /** @description What the reproduction ruled out: one answer per item vig lists for this finding (the dry run prints them), done or not, with a note when not. Required on a submitted finding */
+            exhaustion?: components["schemas"]["Exhaustion"][] | null;
             /** @description Recommended. What the code is supposed to guarantee here, the groundwork the steps break. Same shape as description; follows normal use on the chain */
             expected?: string;
             /** @description Optional. Shown only to verified owners */
