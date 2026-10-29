@@ -267,7 +267,7 @@ func vaultReport(repo, commit, program string) core.FindingsDocument {
 			References:  nil},
 		{Severity: core.SeverityMedium, Title: "Arbitrary CPI target", ExploitableBy: core.ExploitableAnySigner,
 			Location:    core.Location{File: "programs/5-arbitrary-cpi/insecure/src/lib.rs", Package: "5-arbitrary-cpi", LineStart: 13, LineEnd: 13, ProgramID: program, Instruction: "cpi"},
-			Description: "The program invoked through CPI is taken from the accounts list without validation. A caller can substitute any program with a matching instruction layout.",
+			Description: "The program invoked through CPI is taken from the accounts list without validation. A caller can substitute any program with a matching instruction layout.\n\nThe substituted program is handed the token account that [[Owner check missing on token account]] lets a caller forge, so the two compound.",
 			Expected:    "The CPI only ever reaches the SPL Token program, because the program id in the `token_program` slot is checked before the invoke.",
 			Impact:      "The vault's signer seeds are handed to a program the caller chose.",
 			ExploitPath: "Pass an attacker-controlled program id in the token_program slot; the CPI transfers control to it with the vault's signer seeds.",

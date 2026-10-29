@@ -293,7 +293,7 @@ type Finding struct {
 	Severity            Severity         `json:"severity" enum:"critical,high,medium,low,info" doc:"Required."`
 	Title               string           `json:"title" minLength:"3" maxLength:"140" doc:"Required."`
 	Location            Location         `json:"location" doc:"Required."`
-	Description         string           `json:"description" minLength:"1" doc:"Required. Plain text for a reader in a hurry: blank lines separate short paragraphs, lines starting with '- ' are bullets, backticks mark code, files, functions and errors. No paragraph over 600 characters; three or four blocks at most"`
+	Description         string           `json:"description" minLength:"1" doc:"Required. Plain text for a reader in a hurry: blank lines separate short paragraphs, lines starting with '- ' are bullets, backticks mark code, files, functions and errors, [[Title of another finding]] links to it. No paragraph over 600 characters; three or four blocks at most"`
 	ExploitableBy       ExploitableBy    `json:"exploitable_by,omitempty" enum:"anyone,any_user,internal,any_signer,account_owner,admin,upgrade_authority,other_program,internal_network,api_key,none" doc:"Recommended. The privilege an attacker needs to reach this finding, from least to most: anyone (no account, no session), any_user (any signed-in account) or any_signer (any funded key), account_owner (a member of the affected account or position), api_key (an integration's credentials), internal_network (inside the network or a VPN), admin (a privileged role), upgrade_authority (the platform operator or upgrade key), other_program (only through another program or service), internal (insider standing on the code or the telemetry: repo, snapshot or store access, never a customer), none. Shown to every reader"`
 	ExploitPath         string           `json:"exploit_path,omitempty" doc:"Optional. Shown only to verified owners"`
 	ExploitPathWithheld bool             `json:"exploit_path_withheld,omitempty" doc:"An exploit path exists on this finding but is shown only to verified owners"`
@@ -468,8 +468,11 @@ type Known struct {
 // FindingsDocument is the single exchange format: the operator CLI posts it,
 // the agent emits it, the report page renders it, the JSON export is it.
 type FindingsDocument struct {
-	Report   ReportHeader `json:"report"`
-	Findings []Finding    `json:"findings" doc:"In ordinal order. Each reads as a chain: normal_use, expected, the code steps (location, then sites in order), impact. fix is bullets, one per change, with a fenced patch under a bullet when the code is definite. GET /v1/findings/shape lists what is required, recommended and optional with a filled example; POST …/report/check validates and advises without storing"`
+	Report ReportHeader `json:"report"`
+	// dropped is what the last Validate took out: links to findings the
+	// document does not carry. Advise says them to the writer.
+	dropped  []string
+	Findings []Finding `json:"findings" doc:"In ordinal order. Each reads as a chain: normal_use, expected, the code steps (location, then sites in order), impact. fix is bullets, one per change, with a fenced patch under a bullet when the code is definite. GET /v1/findings/shape lists what is required, recommended and optional with a filled example; POST …/report/check validates and advises without storing"`
 }
 
 // Summarize recomputes the summary from the findings.
@@ -518,6 +521,7 @@ func (d *FindingsDocument) Validate() error {
 			d.Findings[i].Sites[j].Location.asPlace()
 		}
 	}
+	d.dropped = d.resolveLinks()
 	if d.Report.AuditID == "" {
 		errs = append(errs, "report.audit_id is required")
 	}
@@ -928,10 +932,11 @@ func DescribeShape(pin Pin) Shape {
 		Chain:       []string{"normal_use", "expected", "location + sites (flow: ordered steps)", "impact"},
 		Required:    []string{"ordinal", "severity", "title", "location.file", "location.line_start", "description", "fix", "exhaustion (one answer per item the dry run lists)"},
 		Recommended: []string{"normal_use", "expected", "impact", "exploitable_by", "evidence", "sites_kind + sites (critical and high)", "sites[].note", "a fenced patch in fix with its place (```rust path:start-end)", "visuals (one capture or file per step, the script and one recording on the finding; a role proof capture of every tool evidence names)"},
-		Optional:    []string{"exploit_path (owners only)", "references", "status", "carried_from_id", "report.pin.excluded", "report.known", "report.methods"},
+		Optional:    []string{"[[Title of another finding]] in prose, when it has to be read first", "exploit_path (owners only)", "references", "status", "carried_from_id", "report.pin.excluded", "report.known", "report.methods"},
 		Rules: []string{
 			"prose: paragraphs under 600 characters, blank lines between them, '- ' bullets, backticks for identifiers, ``` fences for code (under 2000 characters)",
 			"fix: every line a '- ' bullet; a fence right after a bullet is its definite code; a fence place is path:line or path:start-end",
+			"links: [[Title of another finding]] in prose is set as a link to it; one to a finding not in the report, or to the finding itself, is dropped and its words kept",
 			"sites: sites_kind is flow or occurrences; each site has file and line_start; at most one attachment per site",
 			"visuals: ids come from the upload endpoint for this audit; mime, name and size are rebound from the stored bytes; one recording per finding",
 			"evidence that names a tool, or says live, fuzz or onchain, needs an attachment on the finding or a step: the tool's screen or output; role proof keeps it out of the report (vig-op attach --proof)",
@@ -994,7 +999,15 @@ func ExampleFinding() Finding {
 func (d *FindingsDocument) Advise() []string {
 	var out []string
 	say := func(f Finding, msg string) { out = append(out, fmt.Sprintf("finding %d: %s", f.Ordinal, msg)) }
+	out = append(out, d.dropped...)
 	for _, f := range d.Findings {
+		if linked := d.Linked(f); len(linked) > 0 {
+			var to []string
+			for _, n := range linked {
+				to = append(to, fmt.Sprintf("%d", n))
+			}
+			say(f, fmt.Sprintf("links to finding %s; a link is for a finding the reader has to read first, not a see-also; keep it only if this one cannot be understood without it", strings.Join(to, ", ")))
+		}
 		if f.NormalUse == "" {
 			say(f, "no normal_use; the chain opens on the code instead of on how it is ordinarily used")
 		}

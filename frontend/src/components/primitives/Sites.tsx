@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { ArrowRight, Flag, Route, Zap } from 'lucide-react'
 import { CodeSnippet } from './CodeSnippet'
 import { Copy } from './Copy'
-import { Prose } from './Prose'
+import { Prose, type LinkTarget } from './Prose'
 import { VisualFigure, VisualMark } from './Visual'
 import { cn } from '@/lib/utils'
 import { placeOf } from '@/lib/web'
@@ -25,7 +25,7 @@ type Step =
 // recording, the dump. A flow numbers the code steps left to right;
 // occurrences are a row of file:line tabs between the same two ends. The
 // report never grows; the reader switches.
-export function FindingCode({ finding, visualSrc, pin }: { finding: Finding; visualSrc?: (id: string) => string; pin?: { repo: string; commit: string } }) {
+export function FindingCode({ finding, visualSrc, pin, links }: { finding: Finding; visualSrc?: (id: string) => string; pin?: { repo: string; commit: string }; links?: LinkTarget[] }) {
   const sites: Site[] = (finding.sites ?? []).length > 0
     ? (finding.sites ?? [])
     : [{ location: finding.location, snippet: finding.snippet ?? undefined }]
@@ -95,13 +95,13 @@ export function FindingCode({ finding, visualSrc, pin }: { finding: Finding; vis
         {step.kind === 'use' && (
           <>
             <span className="label-caps text-muted-foreground">normal use</span>
-            <Prose text={step.text} />
+            <Prose text={step.text} links={links} />
           </>
         )}
         {step.kind === 'expected' && (
           <>
             <span className="label-caps text-ok">expected</span>
-            <Prose text={step.text} />
+            <Prose text={step.text} links={links} />
           </>
         )}
         {step.kind === 'code' && (
@@ -145,7 +145,7 @@ export function FindingCode({ finding, visualSrc, pin }: { finding: Finding; vis
         {step.kind === 'impact' && (
           <>
             <span className="label-caps text-bad">impact</span>
-            <Prose text={step.text} />
+            <Prose text={step.text} links={links} />
           </>
         )}
         {showOwn && visualSrc && (

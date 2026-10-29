@@ -2409,7 +2409,7 @@ export interface components {
             readonly $schema?: string;
             /** @description Optional. Finding id in the previous report this continues */
             carried_from_id?: string;
-            /** @description Required. Plain text for a reader in a hurry: blank lines separate short paragraphs, lines starting with '- ' are bullets, backticks mark code, files, functions and errors. No paragraph over 600 characters; three or four blocks at most */
+            /** @description Required. Plain text for a reader in a hurry: blank lines separate short paragraphs, lines starting with '- ' are bullets, backticks mark code, files, functions and errors, [[Title of another finding]] links to it. No paragraph over 600 characters; three or four blocks at most */
             description: string;
             /** @description Recommended. What established the finding beyond reading the code */
             evidence?: components["schemas"]["Evidence"];

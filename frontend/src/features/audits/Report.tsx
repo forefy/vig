@@ -292,6 +292,9 @@ export function ReportBody({ report, onStatus, onSeverity, surfaceHref }: { repo
   }
   const facets = facetsOf(all, words)
   const archived = all.filter((f) => f.status === 'archived')
+  // What a [[Title]] in prose can point at: every finding of the report,
+  // archived ones included, since they stay on the page.
+  const links = all.map((f) => ({ ordinal: f.ordinal, title: f.title }))
   const findings = all.filter((f) => f.status !== 'archived' && matches(f, facets, query, findingText))
   const groups = order.map((s) => ({ s, items: findings.filter((f) => f.severity === s) })).filter((g) => g.items.length)
   // Every correction on this report, newest first: what moved, why, who.
@@ -476,14 +479,14 @@ export function ReportBody({ report, onStatus, onSeverity, surfaceHref }: { repo
                     ))}
                   </ol>
                 )}
-                <Prose text={f.description} />
+                <Prose text={f.description} links={links} />
                 {/* The reproduction chain: expected behaviour, the code steps
                     with one attachment each, impact with the finding's own
                     attachments. Attachment bytes come from the same origin as
                     the API (dev proxy included); owner-or-admin by audit id,
                     public by the published slug. */}
                 {(f.snippet || (f.sites ?? []).length > 0 || f.normal_use || f.expected || f.impact || (f.visuals ?? []).length > 0) && (
-                  <FindingCode finding={f} visualSrc={visualSrcFor(report)} pin={{ repo: report.document.report.pin.repo, commit: report.document.report.pin.commit }} />
+                  <FindingCode finding={f} visualSrc={visualSrcFor(report)} pin={{ repo: report.document.report.pin.repo, commit: report.document.report.pin.commit }} links={links} />
                 )}
                 {f.exploit_path && (
                   <div className="flex flex-col gap-1.5">
@@ -496,6 +499,7 @@ export function ReportBody({ report, onStatus, onSeverity, surfaceHref }: { repo
                   <Prose
                     text={f.fix}
                     bullets
+                    links={links}
                     patches={{
                       sites: [
                         ...(f.fix_sites ?? []),

@@ -13,21 +13,44 @@ export type PatchContext = {
   pin?: { repo: string; commit: string }
 }
 
+// Another finding of the same report a link can point at. The key is
+// its title, compared the way core.linkKey does: case and runs of space
+// aside.
+export type LinkTarget = { ordinal: number; title: string }
+const linkKey = (title: string) => title.trim().toLowerCase().split(/\s+/).join(' ')
+
 // Finding prose is plain text with light structure: blank lines separate
 // paragraphs, lines starting with "- " are bullets, backticks mark code,
-// a ``` fence holds a code block, and anything that looks like a source
-// path is set as one. A fix is the same text in a stricter shape: every
-// line a bullet, and a fence right after a bullet is the definite fix for
-// it (the correct code, the exact header value), shown nested under it.
+// a ``` fence holds a code block, [[Title of another finding]] links to
+// it, and anything that looks like a source path is set as one. A fix is
+// the same text in a stricter shape: every line a bullet, and a fence
+// right after a bullet is the definite fix for it (the correct code, the
+// exact header value), shown nested under it.
 const pathRE = /((?:[\w.-]+\/)*[\w.-]+\.(?:sol|rs|ts|tsx|js|go|toml|json|md)(?::\d+(?:-\d+)?)?)/g
-function inline(text: string, key: string) {
+const linkRE = /(\[\[[^[\]\n]+\]\])/g
+function inline(text: string, key: string, links?: LinkTarget[]) {
   return text.split(/(`[^`]+`)/g).flatMap((part, i) => {
     if (part.startsWith('`') && part.endsWith('`') && part.length > 2) {
       return [<code key={`${key}-${i}`} className="rounded-sm bg-secondary px-1 py-0.5 font-mono text-[12.5px] text-foreground">{part.slice(1, -1)}</code>]
     }
-    return part.split(pathRE).map((seg, j) =>
-      j % 2 === 1 ? <code key={`${key}-${i}-${j}`} className="rounded-sm bg-secondary px-1 py-0.5 font-mono text-[12.5px] text-foreground">{seg}</code> : seg,
-    )
+    return part.split(linkRE).flatMap((piece, k) => {
+      if (k % 2 === 1) {
+        // The server drops a link to a finding the report does not carry;
+        // one that still slips through is shown as its words.
+        const title = piece.slice(2, -2).trim()
+        const to = links?.find((l) => linkKey(l.title) === linkKey(title))
+        if (!to) return [title]
+        return [
+          <a key={`${key}-${i}-${k}`} href={`#f-${to.ordinal}`} className="rounded-sm text-foreground underline decoration-border underline-offset-2 hover:decoration-foreground">
+            <span className="num mr-1 text-muted-foreground">{String(to.ordinal).padStart(2, '0')}</span>
+            {to.title}
+          </a>,
+        ]
+      }
+      return piece.split(pathRE).map((seg, j) =>
+        j % 2 === 1 ? <code key={`${key}-${i}-${k}-${j}`} className="rounded-sm bg-secondary px-1 py-0.5 font-mono text-[12.5px] text-foreground">{seg}</code> : seg,
+      )
+    })
   })
 }
 
@@ -105,7 +128,7 @@ function Patch({ text, lang, loc, ctx }: { text: string; lang: string; loc: { fi
 // bullets: render as one list where every prose line is an item and a code
 // block nests under the item before it. The fix's shape; old reports whose
 // fix is a plain sentence become one item.
-export function Prose({ text, className, bullets, patches }: { text: string; className?: string; bullets?: boolean; patches?: PatchContext }) {
+export function Prose({ text, className, bullets, patches, links }: { text: string; className?: string; bullets?: boolean; patches?: PatchContext; links?: LinkTarget[] }) {
   const blocks = proseBlocks(text)
   const block = (lang: string, code: string, key: string | number) => {
     const info = fenceInfo(lang)
@@ -127,7 +150,7 @@ export function Prose({ text, className, bullets, patches }: { text: string; cla
         {items.map((it, i) => (
           <li key={i} className="list-disc marker:text-muted-foreground">
             <div className="flex flex-col gap-1.5">
-              {it.text && <span>{inline(it.text, String(i))}</span>}
+              {it.text && <span>{inline(it.text, String(i), links)}</span>}
               {it.code && block(it.code.lang, it.code.text, 'c')}
             </div>
           </li>
@@ -142,11 +165,11 @@ export function Prose({ text, className, bullets, patches }: { text: string; cla
         if (b.lines.every((l) => /^- /.test(l))) {
           return (
             <ul key={i} className="flex flex-col gap-1.5 pl-4">
-              {b.lines.map((l, j) => <li key={j} className="list-disc marker:text-muted-foreground">{inline(l.slice(2), `${i}-${j}`)}</li>)}
+              {b.lines.map((l, j) => <li key={j} className="list-disc marker:text-muted-foreground">{inline(l.slice(2), `${i}-${j}`, links)}</li>)}
             </ul>
           )
         }
-        return <p key={i}>{inline(b.lines.join(' '), String(i))}</p>
+        return <p key={i}>{inline(b.lines.join(' '), String(i), links)}</p>
       })}
     </div>
   )
