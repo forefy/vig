@@ -750,23 +750,23 @@ const (
 	proseCodeMax      = 2000
 )
 
-// proseBlock is one unit of finding prose: a paragraph, a bullet list, or a
+// ProseBlock is one unit of finding prose: a paragraph, a bullet list, or a
 // fenced code block.
-type proseBlock struct {
-	code bool
-	text string
-	info string // the fence's info line, e.g. "rust" or "rust src/lib.rs:41-45"
+type ProseBlock struct {
+	Code bool
+	Text string
+	Info string // the fence's info line, e.g. "rust" or "rust src/lib.rs:41-45"
 }
 
-// proseBlocks splits prose into blocks. Blank lines separate paragraphs; a
+// ProseBlocks splits prose into blocks. Blank lines separate paragraphs; a
 // line that is exactly ``` or ```lang opens a code block that runs to the
 // next ``` line and may hold blank lines. An unclosed fence is an error.
-func proseBlocks(text string) ([]proseBlock, error) {
-	var out []proseBlock
+func ProseBlocks(text string) ([]ProseBlock, error) {
+	var out []ProseBlock
 	var para []string
 	flush := func() {
 		if t := strings.TrimSpace(strings.Join(para, "\n")); t != "" {
-			out = append(out, proseBlock{text: t})
+			out = append(out, ProseBlock{Text: t})
 		}
 		para = nil
 	}
@@ -788,7 +788,7 @@ func proseBlocks(text string) ([]proseBlock, error) {
 			if !closed {
 				return nil, errors.New("a ``` code fence is never closed")
 			}
-			out = append(out, proseBlock{code: true, text: strings.Join(code, "\n"), info: info})
+			out = append(out, ProseBlock{Code: true, Text: strings.Join(code, "\n"), Info: info})
 			continue
 		}
 		if strings.TrimSpace(l) == "" {
@@ -806,22 +806,22 @@ func proseBlocks(text string) ([]proseBlock, error) {
 // ``` fences around code. A bullet list may run long; a paragraph may not;
 // a code block is bounded on its own.
 func proseShape(text string) error {
-	blocks, err := proseBlocks(text)
+	blocks, err := ProseBlocks(text)
 	if err != nil {
 		return err
 	}
 	for _, b := range blocks {
-		if b.code {
-			if len(b.text) > proseCodeMax {
-				return fmt.Errorf("a code block is %d characters; keep each under %d", len(b.text), proseCodeMax)
+		if b.Code {
+			if len(b.Text) > proseCodeMax {
+				return fmt.Errorf("a code block is %d characters; keep each under %d", len(b.Text), proseCodeMax)
 			}
 			continue
 		}
-		if strings.HasPrefix(b.text, "- ") {
+		if strings.HasPrefix(b.Text, "- ") {
 			continue
 		}
-		if len(b.text) > proseParagraphMax {
-			return fmt.Errorf("a paragraph is %d characters; keep each under %d, split with a blank line or use '- ' bullets", len(b.text), proseParagraphMax)
+		if len(b.Text) > proseParagraphMax {
+			return fmt.Errorf("a paragraph is %d characters; keep each under %d, split with a blank line or use '- ' bullets", len(b.Text), proseParagraphMax)
 		}
 	}
 	return nil
@@ -838,16 +838,16 @@ func fixShape(text string) error {
 	if err := proseShape(text); err != nil {
 		return err
 	}
-	blocks, _ := proseBlocks(text)
+	blocks, _ := ProseBlocks(text)
 	bullets := 0
 	for _, b := range blocks {
-		if b.code {
-			if _, _, err := fenceLocation(b.info); err != nil {
+		if b.Code {
+			if _, _, err := fenceLocation(b.Info); err != nil {
 				return err
 			}
 			continue
 		}
-		for _, l := range strings.Split(b.text, "\n") {
+		for _, l := range strings.Split(b.Text, "\n") {
 			if !strings.HasPrefix(strings.TrimSpace(l), "- ") {
 				return fmt.Errorf("fix lines start with '- ' (one bullet per change); %q does not. Put the correct code in a ``` fence after its bullet", trunc(l, 40))
 			}
@@ -888,17 +888,17 @@ func fenceLocation(info string) (loc Location, ok bool, err error) {
 // FixLocations lists the places a fix's fences apply to, in order, without
 // repeats. The checkout capture fills a FixSite for each.
 func FixLocations(fix string) []Location {
-	blocks, err := proseBlocks(fix)
+	blocks, err := ProseBlocks(fix)
 	if err != nil {
 		return nil
 	}
 	var out []Location
 	seen := map[Location]bool{}
 	for _, b := range blocks {
-		if !b.code {
+		if !b.Code {
 			continue
 		}
-		if loc, ok, err := fenceLocation(b.info); ok && err == nil && !seen[loc] {
+		if loc, ok, err := fenceLocation(b.Info); ok && err == nil && !seen[loc] {
 			seen[loc] = true
 			out = append(out, loc)
 		}
@@ -1076,4 +1076,11 @@ func exampleExhausted() Finding {
 	AnswerAll(&f, true, "")
 	Answer(&f, "negative", false, "no fix deployed yet to re-test against")
 	return f
+}
+
+// FenceLocation reads the place a fix fence names in its info line, when
+// it names one: path:line or path:start-end as its second word.
+func FenceLocation(info string) (Location, bool) {
+	loc, ok, err := fenceLocation(info)
+	return loc, ok && err == nil
 }

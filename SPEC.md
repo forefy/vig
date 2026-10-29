@@ -100,7 +100,7 @@ Five steps, sticky order summary on the right. Steps come from the adapter (§8)
 Audit detail page shows the timeline. Stages are the job states (§6). ETA shown as a countdown. Disclosure line under the timeline: audits run by our agents with human review. Delayed state replaces the ETA with a new one.
 
 ### 4.6 Report
-Header: pinning line plus match status (verified / self-built / mismatch). Findings list grouped by severity, each with location (file:line and program + instruction), description, exploit path (owner only), fix, status control (open / fixed / acknowledged / disputed). JSON export. Publish toggle for owners → public page at `/r/{slug}` with OG image.
+Header: pinning line plus match status (verified / self-built / mismatch). Findings list grouped by severity, each with location (file:line and program + instruction), description, exploit path (owner only), fix, status control (open / fixed / acknowledged / disputed). JSON and PDF export. Publish toggle for owners → public page at `/r/{slug}` with OG image.
 
 ### 4.7 Re-audit
 From a report: "Audit new commit" opens the wizard prefilled with Diff coverage, base = audited commit. Findings carry over and statuses update.
@@ -348,6 +348,7 @@ Go, chi router, huma for typed handlers and OpenAPI 3.1 generation, Scalar serve
 POST /v1/scans                       anonymous, rate limited
 GET  /v1/scans/{token}
 GET  /v1/reports/{slug}              published only
+GET  /v1/reports/{slug}/report.pdf   the published report on paper
 GET  /v1/plans                       pricing table (source of truth for the UI)
 GET  /v1/findings/shape              required, recommended and optional finding fields, the rules, a filled example (§9)
 ```
@@ -389,6 +390,7 @@ POST /v1/audits/{id}/report/publish  DELETE to unpublish
 PATCH /v1/audits/{id}/report/findings/{fid}            status, reason (required for archived) → finding; the move joins its history
 PATCH /v1/audits/{id}/report/findings/{fid}/severity   severity, reason → finding; the change joins its history, the summary follows
 GET  /v1/audits/{id}/report.json
+GET  /v1/audits/{id}/report.pdf      the same document on paper, drawn by the server
 
 POST /v1/purchases                   sku → memo nonce, amount, treasury
 POST /v1/purchases/{id}/confirm      tx signature

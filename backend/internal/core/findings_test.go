@@ -208,8 +208,8 @@ func TestFixShapeIsBulletsWithFences(t *testing.T) {
 	if err := proseShape("The header comes back as\n```\nAccess-Control-Allow-Origin: *\n```\n\n- for every origin"); err != nil {
 		t.Errorf("fenced description: %v", err)
 	}
-	blocks, _ := proseBlocks("a\n\n```sh\ncurl -I\n\nx\n```\n- b")
-	if len(blocks) != 3 || !blocks[1].code || blocks[1].text != "curl -I\n\nx" || blocks[2].text != "- b" {
+	blocks, _ := ProseBlocks("a\n\n```sh\ncurl -I\n\nx\n```\n- b")
+	if len(blocks) != 3 || !blocks[1].Code || blocks[1].Text != "curl -I\n\nx" || blocks[2].Text != "- b" {
 		t.Errorf("blocks %+v", blocks)
 	}
 }

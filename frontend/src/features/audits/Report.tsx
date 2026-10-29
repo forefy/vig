@@ -3,13 +3,14 @@ import { Link, useParams, useSearchParams } from 'react-router'
 import { hostOf, placeOf, routeOf, shortRoute } from '@/lib/web'
 import { Helmet } from 'react-helmet-async'
 import { useQueryClient } from '@tanstack/react-query'
-import { ArrowRight, ChevronDown, ChevronRight, Download, Globe, GitCommitHorizontal } from 'lucide-react'
+import { ArrowRight, ChevronDown, ChevronRight, ChevronUp, Download, Globe, GitCommitHorizontal } from 'lucide-react'
 import { $api } from '@/api/hooks'
 import { api } from '@/api/client'
 import { Page, PageHeader } from '@/app/Shell'
 import { Loading } from '@/features/auth/guards'
 import { Pin, StateBadge, severityState, severityInk, severityDot, MethodsStrip, EvidenceBadge, FindingCode, FactGroup, FactRow, Prose, Reference, ExhaustionDots, ExhaustionList } from '@/components/primitives'
 import { Button } from '@/components/ui/button'
+import { downloadJSON, downloadPDF } from './export'
 import { Switch } from '@/components/ui/switch'
 import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
@@ -200,6 +201,9 @@ export function ReportPage() {
             <Button variant="outline" size="sm" onClick={() => void downloadJSON(id, pin.repo)}>
               <Download className="size-4" /> JSON
             </Button>
+            <Button variant="outline" size="sm" onClick={() => void downloadPDF(id, pin.repo)}>
+              <Download className="size-4" /> PDF
+            </Button>
             {r.is_owner && (
               <label className="flex h-7 items-center gap-2 rounded-md border border-border px-2.5 text-xs">
                 <Globe className={cn('size-3.5', isPublic ? 'text-ok' : 'text-muted-foreground')} />
@@ -307,6 +311,8 @@ export function ReportBody({ report, onStatus, onSeverity, surfaceHref }: { repo
   const [active, setActive] = useState<number | null>(all[0]?.ordinal ?? null)
   // The finding whose exhaustion items are open under its header.
   const [exhausted, setExhausted] = useState<number | null>(null)
+  // Findings whose whole correction history is open; the rest show the latest.
+  const [history, setHistory] = useState<Set<number>>(new Set())
   const stream = useRef<HTMLDivElement>(null)
 
   // The side index follows the reader: the topmost finding in view is active.
@@ -467,23 +473,42 @@ export function ReportBody({ report, onStatus, onSeverity, surfaceHref }: { repo
                   </div>
                 </header>
                 {exhausted === f.ordinal && f.exhaustion && <ExhaustionList answers={f.exhaustion} />}
-                {/* Every re-rating, oldest first: what it was, what it became,
-                    why, who, when. Append-only on the server; a revision that
-                    rates differently is one more row here. */}
-                {changes.some((c) => c.f === f) && (
-                  <ol className="flex flex-col gap-1 border-l border-border pl-3">
-                    {changes.filter((c) => c.f === f).slice().reverse().map((c, i) => (
-                      <li key={i} className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-muted-foreground">
-                        <StateBadge state={c.kind === 'severity' ? severityState[c.from] : (statusState[c.from] ?? 'neutral')} className="h-5 px-1.5 text-[10.5px]">{c.from}</StateBadge>
-                        <ArrowRight className="size-3 text-faint" aria-hidden="true" />
-                        <StateBadge state={c.kind === 'severity' ? severityState[c.to] : (statusState[c.to] ?? 'neutral')} className="h-5 px-1.5 text-[10.5px]">{c.to}</StateBadge>
-                        {c.reason && <span className="text-foreground/80">{c.reason}</span>}
-                        <span className="font-mono text-[11px]">{c.by}</span>
-                        <span className="font-mono text-[11px]" title={c.at}>{relTime(c.at)}</span>
-                      </li>
-                    ))}
-                  </ol>
-                )}
+                {/* The latest correction: what it was, what it became, why,
+                    who, when. Older ones open under it from the count at its
+                    end. Append-only on the server; a revision that rates
+                    differently is one more row here. */}
+                {(() => {
+                  const own = changes.filter((c) => c.f === f)
+                  if (!own.length) return null
+                  const open = history.has(f.ordinal)
+                  const shown = open ? own : own.slice(0, 1)
+                  const toggle = () => setHistory((h) => { const n = new Set(h); if (n.has(f.ordinal)) n.delete(f.ordinal); else n.add(f.ordinal); return n })
+                  return (
+                    <ol className="flex flex-col gap-1 border-l border-border pl-3">
+                      {shown.map((c, i) => (
+                        <li key={i} className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[12px] text-muted-foreground">
+                          <StateBadge state={c.kind === 'severity' ? severityState[c.from] : (statusState[c.from] ?? 'neutral')} className="h-5 px-1.5 text-[10.5px]">{c.from}</StateBadge>
+                          <ArrowRight className="size-3 text-faint" aria-hidden="true" />
+                          <StateBadge state={c.kind === 'severity' ? severityState[c.to] : (statusState[c.to] ?? 'neutral')} className="h-5 px-1.5 text-[10.5px]">{c.to}</StateBadge>
+                          {c.reason && <span className="text-foreground/80">{c.reason}</span>}
+                          <span className="font-mono text-[11px]">{c.by}</span>
+                          <span className="font-mono text-[11px]" title={c.at}>{relTime(c.at)}</span>
+                          {i === 0 && own.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={toggle}
+                              aria-expanded={open}
+                              aria-label={open ? 'latest change only' : `${own.length - 1} earlier changes`}
+                              className="inline-flex h-5 items-center gap-0.5 rounded-sm border border-border px-1 font-mono text-[10.5px] text-faint hover:bg-secondary hover:text-foreground"
+                            >
+                              {open ? <ChevronUp className="size-3" aria-hidden="true" /> : <>+{own.length - 1}<ChevronDown className="size-3" aria-hidden="true" /></>}
+                            </button>
+                          )}
+                        </li>
+                      ))}
+                    </ol>
+                  )
+                })()}
                 <Prose text={f.description} links={links} />
                 {/* The reproduction chain: expected behaviour, the code steps
                     with one attachment each, impact with the finding's own
@@ -654,16 +679,6 @@ export function SummaryStrip({ summary }: { summary: components['schemas']['Summ
   )
 }
 
-async function downloadJSON(id: string, repo: string) {
-  const res = await api.GET('/v1/audits/{id}/report.json', { params: { path: { id } } })
-  if (!res.data) return toast.error('Export failed')
-  const blob = new Blob([JSON.stringify(res.data, null, 2)], { type: 'application/json' })
-  const a = document.createElement('a')
-  a.href = URL.createObjectURL(blob)
-  a.download = `${repo.replace('/', '-')}-findings.json`
-  a.click()
-  URL.revokeObjectURL(a.href)
-}
 
 
 // A facet is one enum of the findings schema, with the values these

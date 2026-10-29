@@ -57,6 +57,7 @@ func (d *Deps) registerAudits(api huma.API) {
 	huma.Register(api, withAuth(op("getAudit", http.MethodGet, "/v1/audits/{id}", "Audit with timeline", "audits"), userAuth), d.getAudit)
 	huma.Register(api, withAuth(op("getReport", http.MethodGet, "/v1/audits/{id}/report", "Report", "audits"), userAuth), d.getReport)
 	huma.Register(api, withAuth(op("exportReport", http.MethodGet, "/v1/audits/{id}/report.json", "Findings JSON export", "audits"), userAuth), d.exportReport)
+	huma.Register(api, pdfOp(withAuth(op("exportReportPDF", http.MethodGet, "/v1/audits/{id}/report.pdf", "The report as a PDF", "audits"), userAuth)), d.exportReportPDF)
 	huma.Register(api, withAuth(op("setFindingStatus", http.MethodPatch, "/v1/audits/{id}/report/findings/{fid}", "Set finding status", "audits"), userAuth), d.setFindingStatus)
 	huma.Register(api, withAuth(op("setFindingSeverity", http.MethodPatch, "/v1/audits/{id}/report/findings/{fid}/severity", "Re-rate a finding up or down with a reason; the change joins its history and the summary follows", "audits"), userAuth), d.setFindingSeverity)
 	huma.Register(api, withAuth(op("publishReport", http.MethodPost, "/v1/audits/{id}/report/publish", "Publish report page", "audits"), userAuth), d.publishReport)

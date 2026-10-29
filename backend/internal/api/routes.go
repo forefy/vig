@@ -158,4 +158,5 @@ func (d *Deps) registerPublic(api huma.API) {
 	huma.Register(api, op("createScan", http.MethodPost, "/v1/scans", "Anonymous pre-flight scan of a public repo", "public"), d.createScan)
 	huma.Register(api, op("getScan", http.MethodGet, "/v1/scans/{token}", "Scan result", "public"), d.getScan)
 	huma.Register(api, op("getPublishedReport", http.MethodGet, "/v1/reports/{slug}", "Published report", "public"), d.getPublishedReport)
+	huma.Register(api, pdfOp(op("getPublishedReportPDF", http.MethodGet, "/v1/reports/{slug}/report.pdf", "Published report as a PDF", "public")), d.getPublishedReportPDF)
 }

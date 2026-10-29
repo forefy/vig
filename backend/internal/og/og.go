@@ -438,3 +438,9 @@ func WorstMatch(states []string) string {
 	}
 	return worst
 }
+
+// Font returns one of the embedded identity faces by file name, for a
+// renderer that needs the bytes rather than a parsed face.
+func Font(name string) ([]byte, error) {
+	return fontFS.ReadFile("fonts/" + name)
+}

@@ -4,7 +4,10 @@ import { $api } from '@/api/hooks'
 import { Loading } from '@/features/auth/guards'
 import { Pin, MethodsStrip } from '@/components/primitives'
 import { ProblemBadge } from '@/components/ui/states'
+import { Download } from 'lucide-react'
+import { Button } from '@/components/ui/button'
 import { ReportBody } from '@/features/audits/Report'
+import { downloadPublicPDF } from '@/features/audits/export'
 import { problemOf } from '@/lib/problem'
 import { fmtDate } from '@/lib/utils'
 
@@ -33,7 +36,12 @@ export function PublicReport() {
       <Seo title={title} description={desc} path={`/r/${slug}`} image={`/og/r/${slug}.png`} type="article" />
       <header className="flex flex-col gap-3 border-b border-border py-8">
         <span className="label-caps">audit report · {fmtDate(r.published_at)}{r.revision > 1 ? ` · rev ${r.revision}` : ''}</span>
-        <h1 className="font-mono text-2xl">{r.document.report.pin.repo}</h1>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <h1 className="font-mono text-2xl">{r.document.report.pin.repo}</h1>
+          <Button variant="outline" size="sm" onClick={() => void downloadPublicPDF(slug, r.document.report.pin.repo)}>
+            <Download className="size-4" /> PDF
+          </Button>
+        </div>
         <Pin pin={r.document.report.pin} />
         <MethodsStrip methods={r.document.report.methods} />
       </header>
