@@ -403,8 +403,13 @@ export function ReportBody({ report, onStatus, onSeverity, surfaceHref }: { repo
                         what established it, in the report header's own shape.
                         Every chip carries its detail on hover. */}
                     <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5">
-                      {(f.location.program_id || f.location.package || f.location.instruction) && (
+                      {(f.location.program_id || f.location.package || f.location.instruction || placeOf(f.location).url) && (
                         <FactGroup label="scope" dense>
+                          {placeOf(f.location).url && (
+                            <FactRow kind="host" dense>
+                              <StateBadge state="neutral" className="h-5 px-1.5 text-[10.5px]" tip={placeOf(f.location).url}>{hostOf(placeOf(f.location).url)}</StateBadge>
+                            </FactRow>
+                          )}
                           {f.location.instruction && (
                             <FactRow kind="function" dense>
                               {surfaceHref ? (
@@ -491,7 +496,10 @@ export function ReportBody({ report, onStatus, onSeverity, surfaceHref }: { repo
                 {f.exploit_path && (
                   <div className="flex flex-col gap-1.5">
                     <span className="label-caps text-bad">exploit path</span>
-                    <pre className="overflow-x-auto rounded-md border border-bad/20 bg-bad-soft/40 p-3 font-mono text-xs leading-relaxed whitespace-pre-wrap">{f.exploit_path}</pre>
+                    <Prose
+                      text={f.exploit_path}
+                      bullets
+                    />
                   </div>
                 )}
                 <div className="flex flex-col gap-1.5">
