@@ -336,16 +336,20 @@ func Render(r Report) ([]byte, error) {
 	if len(sha) > 7 {
 		sha = sha[:7]
 	}
-	if sha == "" {
-		sha = "-------"
-	}
 	x := float64(margin)
 	y := 290.0
-	x += cv.text(pinFace, x, y, sha, Foreground)
-	x += cv.text(pinFace, x, y, "  ·  ", Pending)
+	// A site has no commit of its own: its line is its repositories and
+	// that it is live.
+	if sha != "" {
+		x += cv.text(pinFace, x, y, sha, Foreground)
+		x += cv.text(pinFace, x, y, "  ·  ", Pending)
+	}
 	one, many := "program", "programs"
-	if r.Adapter == "ethereum" {
+	switch r.Adapter {
+	case "ethereum":
 		one, many = "contract", "contracts"
+	case "webapp":
+		one, many = "repo", "repos"
 	}
 	x += cv.text(pinFace, x, y, fmt.Sprintf("%d %s", r.Programs, plural(r.Programs, one, many)), Muted)
 	x += cv.text(pinFace, x, y, "  ·  ", Pending)
@@ -418,6 +422,8 @@ func matchWord(m string) (string, color.NRGBA) {
 		return "self-built", OK
 	case "mismatch":
 		return "mismatch", Bad
+	case "live":
+		return "live site", OK
 	default:
 		return "unverified", Pending
 	}

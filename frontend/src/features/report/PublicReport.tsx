@@ -4,10 +4,10 @@ import { $api } from '@/api/hooks'
 import { Loading } from '@/features/auth/guards'
 import { Pin, MethodsStrip } from '@/components/primitives'
 import { ProblemBadge } from '@/components/ui/states'
-import { Download } from 'lucide-react'
-import { Button } from '@/components/ui/button'
 import { ReportBody } from '@/features/audits/Report'
-import { downloadPublicPDF } from '@/features/audits/export'
+import { ExportDialog } from '@/features/audits/export'
+import { Revisions } from '@/features/audits/revisions'
+import { useReportView } from '@/features/audits/view'
 import { problemOf } from '@/lib/problem'
 import { fmtDate } from '@/lib/utils'
 
@@ -15,6 +15,7 @@ import { fmtDate } from '@/lib/utils'
 export function PublicReport() {
   const { slug = '' } = useParams()
   const q = $api.useQuery('get', '/v1/reports/{slug}', { params: { path: { slug } } })
+  const view = useReportView(q.data)
   if (q.isLoading) return <Loading />
   const r = q.data
   // Only a 404 says the slug is not published. Every other way of having no
@@ -30,19 +31,18 @@ export function PublicReport() {
   }
   const s = r.document.report.summary
   const title = `${r.document.report.pin.repo} audit`
-  const desc = `${s.critical} critical, ${s.high} high, ${s.medium} medium, ${s.low} low. Pinned to ${r.document.report.pin.commit.slice(0, 7)}.`
+  const pinned = r.adapter === 'webapp' ? '' : ` Pinned to ${r.document.report.pin.commit.slice(0, 7)}.`
+  const desc = `${s.critical} critical, ${s.high} high, ${s.medium} medium, ${s.low} low.${pinned}`
   return (
     <div className="mx-auto max-w-[1200px] px-6 pb-20 md:px-10">
       <Seo title={title} description={desc} path={`/r/${slug}`} image={`/og/r/${slug}.png`} type="article" />
       <header className="flex flex-col gap-3 border-b border-border py-8">
-        <span className="label-caps">audit report · {fmtDate(r.published_at)}{r.revision > 1 ? ` · rev ${r.revision}` : ''}</span>
+        <span className="label-caps">audit report · {fmtDate(r.published_at)}</span>
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <h1 className="font-mono text-2xl">{r.document.report.pin.repo}</h1>
-          <Button variant="outline" size="sm" onClick={() => void downloadPublicPDF(slug, r.document.report.pin.repo)}>
-            <Download className="size-4" /> PDF
-          </Button>
+          <h1 className="font-mono text-2xl">{r.document.report.pin.repo}<Revisions report={r} className="ml-3 align-middle" /></h1>
+          <ExportDialog target={{ slug }} repo={r.document.report.pin.repo} components={(r.document.report.pin.programs ?? []).length + (r.document.report.pin.repos ?? []).length} {...view} />
         </div>
-        <Pin pin={r.document.report.pin} />
+        <Pin pin={r.document.report.pin} adapter={r.adapter} findings={r.document.findings ?? []} />
         <MethodsStrip methods={r.document.report.methods} />
       </header>
       <div className="pt-8">

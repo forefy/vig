@@ -234,6 +234,18 @@ type Report struct {
 	CreatedAt     time.Time             `json:"created_at"`
 	Revision      int                   `json:"revision" doc:"1 for the delivered report, one more per revision"`
 	Supersedes    string                `json:"supersedes,omitempty" doc:"The report version this one replaced"`
+	Revisions     []RevisionNote        `json:"revisions,omitempty" doc:"Every version of this report, newest first, with why it was made; absent on a first version"`
+}
+
+// RevisionNote is one version of a report: why it was made and what it
+// changed against the one before.
+type RevisionNote struct {
+	Revision int       `json:"revision"`
+	Reason   string    `json:"reason" doc:"Why; empty on the first version"`
+	At       time.Time `json:"at"`
+	Added    int       `json:"added"`
+	Removed  int       `json:"removed"`
+	Kept     int       `json:"kept"`
 }
 
 // ---- scans ----

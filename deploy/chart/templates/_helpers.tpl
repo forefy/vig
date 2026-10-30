@@ -103,6 +103,8 @@ Secret if present, otherwise generate a fresh one.
   value: {{ .Values.app.logFormat | quote }}
 - name: VIG_WORKERS
   value: {{ ternary "1" "0" .Values.app.workers | quote }}
+- name: VIG_WATCH
+  value: {{ ternary "1" "0" .Values.app.watch | quote }}
 - name: SESSION_SECRET
   valueFrom:
     secretKeyRef:

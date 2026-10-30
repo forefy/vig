@@ -118,7 +118,11 @@ func toReport(r store.Report, isOwner bool) Report {
 	for i := range doc.Findings {
 		doc.Findings[i].ID = r.Findings[i].ID
 	}
-	return Report{ID: r.ID, AuditID: r.AuditID, Adapter: r.Adapter, Document: doc, IsOwner: isOwner, PublishedSlug: r.PublishedSlug, PublishedAt: r.PublishedAt, CreatedAt: r.CreatedAt, Revision: r.Revision, Supersedes: r.Supersedes}
+	var revs []RevisionNote
+	for _, n := range r.Revisions {
+		revs = append(revs, RevisionNote{Revision: n.Revision, Reason: n.Reason, At: n.At, Added: n.Added, Removed: n.Removed, Kept: n.Kept})
+	}
+	return Report{ID: r.ID, AuditID: r.AuditID, Adapter: r.Adapter, Document: doc, IsOwner: isOwner, PublishedSlug: r.PublishedSlug, PublishedAt: r.PublishedAt, CreatedAt: r.CreatedAt, Revision: r.Revision, Supersedes: r.Supersedes, Revisions: revs}
 }
 
 func toPurchase(p store.Purchase) Purchase {

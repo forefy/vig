@@ -108,6 +108,7 @@ func TestRoutesInContract(t *testing.T) {
 		"/v1/admin/audits/{id}/report.json":  {"get"},
 		"/v1/audits/{id}/report.pdf":         {"get"},
 		"/v1/reports/{slug}/report.pdf":      {"get"},
+		"/v1/reports/{slug}/report.json":     {"get"},
 		"/v1/admin/users/{id}":               {"get"},
 		"/v1/targets/{id}/tree":              {"get"},
 		"/v1/scans/{token}":                  {"get"},

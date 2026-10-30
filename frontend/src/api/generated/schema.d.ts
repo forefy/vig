@@ -1508,6 +1508,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/reports/{slug}/report.json": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Published report's findings JSON */
+        get: operations["getPublishedReportJSON"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/reports/{slug}/report.pdf": {
         parameters: {
             query?: never;
@@ -3205,6 +3222,17 @@ export interface components {
              * @example vig-demo/vault-programs
              */
             repo: string;
+            /** @description Repositories and commits the findings were sourced from, beyond the main pin */
+            repos?: components["schemas"]["PinRepo"][] | null;
+        };
+        PinRepo: {
+            /** @description Full commit sha of the repository snapshot reviewed */
+            commit: string;
+            /**
+             * @description Repository name, owner/name for a GitHub repo
+             * @example cymulate-bas-platform
+             */
+            name: string;
         };
         Plan: {
             /** Format: int64 */
@@ -3425,6 +3453,8 @@ export interface components {
              * @description 1 for the delivered report, one more per revision
              */
             revision: number;
+            /** @description Every version of this report, newest first, with why it was made; absent on a first version */
+            revisions?: components["schemas"]["RevisionNote"][] | null;
             /** @description The report version this one replaced */
             supersedes?: string;
         };
@@ -3477,6 +3507,20 @@ export interface components {
             /** @enum {string} */
             selector: "branch" | "tag" | "commit";
             value: string;
+        };
+        RevisionNote: {
+            /** Format: int64 */
+            added: number;
+            /** Format: date-time */
+            at: string;
+            /** Format: int64 */
+            kept: number;
+            /** @description Why; empty on the first version */
+            reason: string;
+            /** Format: int64 */
+            removed: number;
+            /** Format: int64 */
+            revision: number;
         };
         Sampling: {
             /**
@@ -4653,7 +4697,10 @@ export interface operations {
     };
     adminReviseReport: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Why this version is made; shown on the report's revision trail */
+                reason?: string;
+            };
             header?: never;
             path: {
                 id: string;
@@ -5514,7 +5561,16 @@ export interface operations {
     };
     exportReport: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Comma-separated ordinals to keep; absent keeps every finding */
+                findings?: string;
+                /** @description Comma-separated parts to leave out: methods, scope, ruled_out, history, code, attachments, references, known */
+                without?: string;
+                /** @description Number the exported findings 1 upward in reading order (by severity) instead of keeping the report's ordinals */
+                renumber?: boolean;
+                /** @description Print every pinned component on the cover; otherwise the three with the most findings and a count of the others */
+                full_scope?: boolean;
+            };
             header?: never;
             path: {
                 id: string;
@@ -5545,7 +5601,16 @@ export interface operations {
     };
     exportReportPDF: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Comma-separated ordinals to keep; absent keeps every finding */
+                findings?: string;
+                /** @description Comma-separated parts to leave out: methods, scope, ruled_out, history, code, attachments, references, known */
+                without?: string;
+                /** @description Number the exported findings 1 upward in reading order (by severity) instead of keeping the report's ordinals */
+                renumber?: boolean;
+                /** @description Print every pinned component on the cover; otherwise the three with the most findings and a count of the others */
+                full_scope?: boolean;
+            };
             header?: never;
             path: {
                 id: string;
@@ -7335,9 +7400,58 @@ export interface operations {
             };
         };
     };
+    getPublishedReportJSON: {
+        parameters: {
+            query?: {
+                /** @description Comma-separated ordinals to keep; absent keeps every finding */
+                findings?: string;
+                /** @description Comma-separated parts to leave out: methods, scope, ruled_out, history, code, attachments, references, known */
+                without?: string;
+                /** @description Number the exported findings 1 upward in reading order (by severity) instead of keeping the report's ordinals */
+                renumber?: boolean;
+                /** @description Print every pinned component on the cover; otherwise the three with the most findings and a count of the others */
+                full_scope?: boolean;
+            };
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FindingsDocument"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     getPublishedReportPDF: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Comma-separated ordinals to keep; absent keeps every finding */
+                findings?: string;
+                /** @description Comma-separated parts to leave out: methods, scope, ruled_out, history, code, attachments, references, known */
+                without?: string;
+                /** @description Number the exported findings 1 upward in reading order (by severity) instead of keeping the report's ordinals */
+                renumber?: boolean;
+                /** @description Print every pinned component on the cover; otherwise the three with the most findings and a count of the others */
+                full_scope?: boolean;
+            };
             header?: never;
             path: {
                 slug: string;

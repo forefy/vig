@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -86,11 +87,17 @@ type ProgramPin struct {
 }
 
 // Pin is the report header. It is what makes a report defensible.
+type PinRepo struct {
+	Name   string `json:"name" doc:"Repository name, owner/name for a GitHub repo" example:"cymulate-bas-platform"`
+	Commit string `json:"commit" doc:"Full commit sha of the repository snapshot reviewed"`
+}
+
 type Pin struct {
 	Repo     string       `json:"repo" doc:"owner/name" example:"vig-demo/vault-programs"`
 	Commit   string       `json:"commit" doc:"Full commit sha that was reviewed"`
 	BaseSHA  string       `json:"base_sha,omitempty" doc:"For diff reviews, the commit findings are relative to"`
 	Programs []ProgramPin `json:"programs"`
+	Repos    []PinRepo    `json:"repos,omitempty" doc:"Repositories and commits the findings were sourced from, beyond the main pin"`
 	Excluded []string     `json:"excluded,omitempty" doc:"Paths in the repository the review left out, as folders like audits/ or contracts/test/"`
 }
 
@@ -1083,4 +1090,113 @@ func exampleExhausted() Finding {
 func FenceLocation(info string) (Location, bool) {
 	loc, ok, err := fenceLocation(info)
 	return loc, ok && err == nil
+}
+
+// Keep cuts the document down to the findings with these ordinals, in
+// their order, for an export of a selection: the summary follows the kept
+// findings and a link to one that was cut keeps its words.
+func (d *FindingsDocument) Keep(ordinals []int) {
+	want := map[int]bool{}
+	for _, n := range ordinals {
+		want[n] = true
+	}
+	kept := d.Findings[:0:0]
+	for _, f := range d.Findings {
+		if want[f.Ordinal] {
+			kept = append(kept, f)
+		}
+	}
+	d.Findings = kept
+	d.Report.Summary = Summarize(kept)
+	d.resolveLinks()
+}
+
+// ExportParts are the parts of a report an export may leave out, in the
+// words the page offers them: methods (what ran and each finding's
+// evidence), scope (the pinned components and each finding's place in
+// them), ruled_out, history, code, attachments, references and known.
+var ExportParts = []string{"methods", "scope", "ruled_out", "history", "code", "attachments", "references", "known"}
+
+// Without strips parts from the document for an export. An unknown part
+// is an error.
+func (d *FindingsDocument) Without(parts []string) error {
+	known := map[string]bool{}
+	for _, p := range ExportParts {
+		known[p] = true
+	}
+	drop := map[string]bool{}
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		if !known[p] {
+			return fmt.Errorf("without: %q is not a part; the parts are %s", p, strings.Join(ExportParts, ", "))
+		}
+		drop[p] = true
+	}
+	if drop["methods"] {
+		d.Report.Methods = nil
+	}
+	if drop["scope"] {
+		d.Report.Pin.Programs = []ProgramPin{}
+		d.Report.Pin.Excluded = nil
+	}
+	if drop["known"] {
+		d.Report.Known = nil
+	}
+	for i := range d.Findings {
+		f := &d.Findings[i]
+		if drop["methods"] {
+			f.Evidence = nil
+		}
+		if drop["scope"] {
+			f.Location.ProgramID, f.Location.Package, f.Location.Instruction = "", "", ""
+		}
+		if drop["ruled_out"] {
+			f.Exhaustion = nil
+		}
+		if drop["history"] {
+			f.SeverityChanges, f.StatusChanges = nil, nil
+		}
+		if drop["code"] {
+			f.Snippet, f.FixSites, f.ReferenceCode = nil, nil, nil
+			for j := range f.Sites {
+				f.Sites[j].Snippet = nil
+			}
+		}
+		if drop["attachments"] {
+			f.Visuals = nil
+			for j := range f.Sites {
+				f.Sites[j].Visuals = nil
+			}
+		}
+		if drop["references"] {
+			f.References, f.ReferenceCode = nil, nil
+		}
+	}
+	return nil
+}
+
+// Renumber gives the findings fresh ordinals, 1 upward, in the order a
+// report reads them: by severity, then by their old ordinal, archived ones
+// last. Links name findings by title, so they survive.
+func (d *FindingsDocument) Renumber() {
+	rank := map[Severity]int{}
+	for i, s := range severities {
+		rank[s] = i
+	}
+	sort.SliceStable(d.Findings, func(i, j int) bool {
+		a, b := d.Findings[i], d.Findings[j]
+		if (a.Status == FindingArchived) != (b.Status == FindingArchived) {
+			return a.Status != FindingArchived
+		}
+		if rank[a.Severity] != rank[b.Severity] {
+			return rank[a.Severity] < rank[b.Severity]
+		}
+		return a.Ordinal < b.Ordinal
+	})
+	for i := range d.Findings {
+		d.Findings[i].Ordinal = i + 1
+	}
 }

@@ -1,8 +1,9 @@
 // Package pdf renders a report as a PDF: the same facts the page shows, in
 // the same order, set in the identity faces on paper. Everything is drawn
 // in-process with fpdf and the fonts embedded in the og package; no
-// browser, no external service. The light palette from tokens.css is the
-// one used, since a PDF is printed or read on white.
+// browser, no external service. The dark palette from tokens.css is the
+// one used: the page is painted the identity's ground, so the PDF reads
+// like the report does.
 package pdf
 
 import (
@@ -29,7 +30,17 @@ type Input struct {
 	Revision    int
 	CreatedAt   time.Time
 	PublishedAt *time.Time
-	Visual      func(id string) (mime string, data []byte, ok bool)
+	// Of is how many findings the whole report carries when the document
+	// is a selection of them; zero when it is the whole report.
+	Of int
+	// FullScope prints every pinned component on the cover; otherwise the
+	// three with the most findings and a count of the others.
+	FullScope bool
+	// Ranked is what the components are ranked by: the whole report's
+	// findings, archived ones included, so the cover orders them the way
+	// the page does whatever the export keeps. Nil ranks by Doc.
+	Ranked []core.Finding
+	Visual func(id string) (mime string, data []byte, ok bool)
 }
 
 // Render draws the report. The document is laid out twice: once to learn
@@ -43,24 +54,28 @@ func Render(in Input) ([]byte, error) {
 	return out, err
 }
 
-// ---------- palette (tokens.css, light) ----------
+// ---------- palette (tokens.css, dark) ----------
 
 type rgb struct{ r, g, b int }
 
 func hex(v uint32) rgb { return rgb{int(v >> 16 & 0xff), int(v >> 8 & 0xff), int(v & 0xff)} }
 
 var (
-	fg        = hex(0x0f0f12)
-	muted     = hex(0x52525b)
-	faint     = hex(0xa1a1aa)
-	border    = hex(0xe4e4e7)
-	secondary = hex(0xf4f4f5)
-	okInk     = hex(0x16a34a)
-	okSoft    = hex(0xdcfce7)
-	warnInk   = hex(0xca8a04)
-	warnSoft  = hex(0xfef9c3)
-	badInk    = hex(0xdc2626)
-	badSoft   = hex(0xfee2e2)
+	ground    = hex(0x0f0f12)
+	card      = hex(0x18181b)
+	fg        = hex(0xfafafa)
+	muted     = hex(0xa1a1aa)
+	faint     = hex(0x52525b)
+	border    = hex(0x27272a)
+	secondary = hex(0x27272a)
+	accent    = hex(0x86efac)
+	codeInk   = hex(0xd4d4d8)
+	okInk     = hex(0x82e28d)
+	okSoft    = hex(0x0e2e12)
+	warnInk   = hex(0xfacc15)
+	warnSoft  = hex(0x422006)
+	badInk    = hex(0xf87171)
+	badSoft   = hex(0x450a0a)
 )
 
 // A tone is a badge's ink on its soft ground.
@@ -68,17 +83,17 @@ type tone struct{ ink, soft rgb }
 
 var (
 	neutral = tone{muted, secondary}
-	pending = tone{faint, secondary}
+	pending = tone{hex(0x71717a), secondary}
 	okTone  = tone{okInk, okSoft}
 	warn    = tone{warnInk, warnSoft}
 	bad     = tone{badInk, badSoft}
 
 	severityTone = map[core.Severity]tone{
-		core.SeverityCritical: {hex(0xb91c1c), hex(0xfecaca)},
-		core.SeverityHigh:     {hex(0xef4444), hex(0xfee2e2)},
-		core.SeverityMedium:   {hex(0xd97706), hex(0xfef3c7)},
-		core.SeverityLow:      {hex(0x0284c7), hex(0xe0f2fe)},
-		core.SeverityInfo:     {hex(0x52525b), hex(0xf4f4f5)},
+		core.SeverityCritical: {hex(0xef4444), hex(0x450a0a)},
+		core.SeverityHigh:     {hex(0xfca5a5), hex(0x3f1515)},
+		core.SeverityMedium:   {hex(0xfbbf24), hex(0x422006)},
+		core.SeverityLow:      {hex(0x7dd3fc), hex(0x082f49)},
+		core.SeverityInfo:     {hex(0xa1a1aa), hex(0x27272a)},
 	}
 	statusTone = map[core.FindingStatus]tone{
 		core.FindingOpen: neutral, core.FindingFixed: okTone, core.FindingAcknowledged: neutral, core.FindingDisputed: warn, core.FindingArchived: pending,
@@ -191,6 +206,11 @@ func build(in Input, total int) ([]byte, int, error) {
 		d.byTitle[linkKey(f.Title)] = f.Ordinal
 		d.titles[f.Ordinal] = f.Title
 	}
+	// Every page is painted the ground before anything else lands on it.
+	p.SetHeaderFunc(func() {
+		d.fill(ground)
+		d.Rect(0, 0, pageW, pageH, "F")
+	})
 	p.SetFooterFunc(d.footer)
 	d.cover()
 	d.findings()
@@ -226,7 +246,7 @@ func (d *doc) footer() {
 	d.ink(faint)
 	pin := d.in.Doc.Report.Pin
 	left := pin.Repo
-	if pin.Commit != "" {
+	if pin.Commit != "" && !d.words.web {
 		left += "  " + short(pin.Commit)
 	}
 	if d.in.Revision > 1 {
@@ -266,7 +286,7 @@ func (d *doc) label(s string, c rgb) {
 func (d *doc) labelAt(s string) float64 {
 	d.mono(labelPt)
 	d.ink(faint)
-	w := d.GetStringWidth(strings.ToUpper(s)) + 1.4
+	w := d.GetStringWidth(strings.ToUpper(s)) + 3
 	d.CellFormat(w, badgeH, strings.ToUpper(s), "", 0, "L", false, 0, "")
 	return w
 }
@@ -280,8 +300,10 @@ func (d *doc) badge(text string, t tone) float64 {
 	d.fill(t.soft)
 	d.RoundedRect(x, y, w, badgeH, 0.9, "1234", "F")
 	d.ink(t.ink)
-	d.SetXY(x+pad, y)
-	d.CellFormat(w-2*pad, badgeH, text, "", 0, "L", false, 0, "")
+	// A cell pads its text on the left by the cell margin; start that much
+	// earlier so the word sits as far from the right edge as the left.
+	d.SetXY(x+pad-d.GetCellMargin(), y)
+	d.CellFormat(w-2*pad+d.GetCellMargin(), badgeH, text, "", 0, "L", false, 0, "")
 	d.SetXY(x+w, y)
 	return w
 }
@@ -303,7 +325,7 @@ func (d *doc) chips(items []chip, indent float64) {
 		d.mono(labelPt)
 		w := 0.0
 		if c.kind != "" {
-			w += d.GetStringWidth(strings.ToUpper(c.kind)) + 1.4
+			w += d.GetStringWidth(strings.ToUpper(c.kind)) + 3
 		}
 		d.mono(6.8)
 		if c.plain {
@@ -312,7 +334,7 @@ func (d *doc) chips(items []chip, indent float64) {
 			w += d.GetStringWidth(c.text) + 3
 		}
 		if d.GetX() > x0 && d.GetX()+w > right {
-			d.Ln(badgeH + 1.2)
+			d.Ln(badgeH + 1.6)
 			d.SetX(x0)
 		}
 		if c.kind != "" {
@@ -325,9 +347,9 @@ func (d *doc) chips(items []chip, indent float64) {
 		} else {
 			d.badge(c.text, c.tone)
 		}
-		d.SetX(d.GetX() + 2.4)
+		d.SetX(d.GetX() + 4)
 	}
-	d.Ln(badgeH + 1.2)
+	d.Ln(badgeH + 1.6)
 }
 
 // ---------- prose ----------
@@ -349,10 +371,37 @@ func (d *doc) inline(text string, pt, lh float64) {
 		d.ink(fg)
 		d.Write(lh, s)
 	}
+	// A code span sits on the card ground like the page's chip. Write puts
+	// its glyphs one cell margin right of the cursor, so the ground is
+	// painted from there; a span that does not fit breaks at a word and
+	// each line's part carries its own ground.
 	code := func(s string) {
 		d.mono(pt - 0.9)
-		d.ink(hex(0x3f3f46))
-		d.Write(lh, s)
+		const pad = 0.7
+		cm := d.GetCellMargin()
+		words := strings.Split(s, " ")
+		for len(words) > 0 {
+			n := len(words)
+			for n > 1 && d.GetX()+cm+d.GetStringWidth(strings.Join(words[:n], " "))+2*pad > right {
+				n--
+			}
+			chunk := strings.Join(words[:n], " ")
+			width := d.GetStringWidth(chunk)
+			if d.GetX()+cm+width+2*pad > right && d.GetX() > d.leftMargin() {
+				d.Ln(lh)
+			}
+			x := d.GetX()
+			d.fill(secondary)
+			d.RoundedRect(x+cm, d.GetY()+0.35, width+2*pad, lh-0.7, 0.6, "1234", "F")
+			d.SetX(x + pad)
+			d.ink(codeInk)
+			d.Write(lh, chunk)
+			d.SetX(d.GetX() + pad)
+			words = words[n:]
+			if len(words) > 0 {
+				d.Ln(lh)
+			}
+		}
 	}
 	plain := func(s string) {
 		for _, piece := range splitRE(pathRE, s) {
@@ -468,7 +517,7 @@ func (d *doc) para(text string, o proseOpt) {
 	d.inline(text, o.pt, o.lh)
 	d.Ln(o.lh)
 	d.SetLeftMargin(margin)
-	d.Ln(1.4)
+	d.Ln(1.8)
 }
 
 func (d *doc) bullet(text string, o proseOpt) {
@@ -511,11 +560,11 @@ func (d *doc) code(lines []codeLine, indent float64, numbered bool) {
 	}
 	pad := 2.0
 	textW := w - gutter - markW - 2*pad
-	d.fill(secondary)
+	d.fill(card)
 	d.SetX(x0)
 	d.CellFormat(w, 1.4, "", "", 1, "L", true, 0, "")
 	for _, l := range lines {
-		ground := secondary
+		ground := card
 		switch {
 		case l.mark == "-":
 			ground = badSoft
@@ -563,10 +612,83 @@ func (d *doc) code(lines []codeLine, indent float64, numbered bool) {
 			d.CellFormat(w-gutter-markW, codeLH, "  "+part, "", 1, "L", true, 0, "")
 		}
 	}
-	d.fill(secondary)
+	d.fill(card)
 	d.SetX(x0)
 	d.CellFormat(w, 1.4, "", "", 1, "L", true, 0, "")
 	d.Ln(1.6)
+}
+
+// codeHeight is what code would take, for keeping a step on one page.
+func (d *doc) codeHeight(lines []string, indent float64, numbered bool) float64 {
+	textW := contentW - indent - 2*2
+	if numbered {
+		textW -= 7.5
+	}
+	d.mono(codePt)
+	n := 0
+	for _, l := range lines {
+		parts := d.SplitText(strings.ReplaceAll(l, "\t", "    "), textW)
+		if len(parts) == 0 {
+			parts = []string{""}
+		}
+		n += len(parts)
+	}
+	return float64(n)*codeLH + 2.8 + 1.6
+}
+
+// proseHeight is close to what prose would take: wrapped in the body face,
+// mono spans measured as if they were not. Enough to keep a section with
+// the picture that follows it.
+func (d *doc) proseHeight(text string, indent float64) float64 {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return 0
+	}
+	blocks, err := core.ProseBlocks(text)
+	if err != nil {
+		blocks = []core.ProseBlock{{Text: text}}
+	}
+	h := 0.0
+	for _, b := range blocks {
+		if b.Code {
+			if b.Info != "" {
+				h += 3.6
+			}
+			h += d.codeHeight(strings.Split(b.Text, "\n"), indent, false)
+			continue
+		}
+		d.sans(bodyPt)
+		var para []string
+		flush := func() {
+			if len(para) > 0 {
+				h += float64(len(d.SplitText(strings.Join(para, " "), contentW-indent)))*bodyLH + 1.4
+				para = nil
+			}
+		}
+		for _, l := range strings.Split(b.Text, "\n") {
+			l = strings.TrimSpace(l)
+			if strings.HasPrefix(l, "- ") {
+				flush()
+				h += float64(len(d.SplitText(l[2:], contentW-indent-bulletIndent)))*bodyLH + 0.6
+				continue
+			}
+			if l != "" {
+				para = append(para, l)
+			}
+		}
+		flush()
+	}
+	return h
+}
+
+// keep starts a new page unless h more millimetres fit on this one; a
+// block taller than a page still starts at the top of one.
+func (d *doc) keep(h float64) {
+	usable := limit - margin
+	if h > usable {
+		h = usable
+	}
+	d.need(h)
 }
 
 // fence sets a ``` block. One whose info line names a place, with the
@@ -678,37 +800,83 @@ func (d *doc) snippet(loc core.Location, s *core.Snippet, note string, indent fl
 	d.code(lines, indent, true)
 }
 
+// snippetHeight is what a step takes: its place, its note, its code.
+func (d *doc) snippetHeight(loc core.Location, s *core.Snippet, note string, indent float64) float64 {
+	h := 4.0
+	if note != "" {
+		d.sans(smallPt)
+		h += float64(len(d.SplitText(note, contentW-indent))) * smallLH
+	}
+	if s == nil || s.Code == "" {
+		return h + 1
+	}
+	return h + d.codeHeight(strings.Split(s.Code, "\n"), indent, true)
+}
+
+// A picture the document can draw: registered once, measured for the
+// column, drawn by name.
+type picture struct {
+	name, kind string
+	w, h       float64
+}
+
+func (d *doc) picture(v core.Visual, indent float64) (picture, bool) {
+	kind := v.Kind
+	if kind == "" {
+		kind = core.VisualKindOf(v.Mime)
+	}
+	if kind != core.VisualImage || d.in.Visual == nil {
+		return picture{}, false
+	}
+	mime, data, ok := d.in.Visual(v.ID)
+	if !ok {
+		return picture{}, false
+	}
+	t := imageType(mime)
+	if t == "" {
+		return picture{}, false
+	}
+	name := "v-" + v.ID
+	info := d.RegisterImageOptionsReader(name, fpdf.ImageOptions{ImageType: t}, bytes.NewReader(data))
+	if !d.Ok() || info == nil || info.Width() <= 0 {
+		d.ClearError()
+		return picture{}, false
+	}
+	// Natural size at 110 dpi, capped at the column and at most of a page.
+	w := info.Width() * 72 / 110
+	if w > contentW-indent {
+		w = contentW - indent
+	}
+	h := w * info.Height() / info.Width()
+	if h > limit-margin-20 {
+		h = limit - margin - 20
+		w = h * info.Width() / info.Height()
+	}
+	return picture{name: name, kind: t, w: w, h: h}, true
+}
+
+// visualHeight is what visual would take, caption included.
+func (d *doc) visualHeight(v core.Visual, indent float64) float64 {
+	d.sans(smallPt)
+	caption := float64(len(d.SplitText(v.Caption, contentW-indent)))*smallLH + 1.6
+	if pic, ok := d.picture(v, indent); ok {
+		return pic.h + 1.2 + caption
+	}
+	return badgeH + caption
+}
+
 // visual embeds a picture, or sets a row for a recording or a file.
 func (d *doc) visual(v core.Visual, indent float64) {
 	kind := v.Kind
 	if kind == "" {
 		kind = core.VisualKindOf(v.Mime)
 	}
-	if kind == core.VisualImage && d.in.Visual != nil {
-		if mime, data, ok := d.in.Visual(v.ID); ok {
-			if t := imageType(mime); t != "" {
-				name := "v-" + v.ID
-				info := d.RegisterImageOptionsReader(name, fpdf.ImageOptions{ImageType: t}, bytes.NewReader(data))
-				if d.Ok() && info != nil && info.Width() > 0 {
-					// Natural size at 110 dpi, capped at the column.
-					w := info.Width() * 72 / 110
-					if w > contentW-indent {
-						w = contentW - indent
-					}
-					h := w * info.Height() / info.Width()
-					if h > limit-margin-20 {
-						h = limit - margin - 20
-						w = h * info.Width() / info.Height()
-					}
-					d.need(h + 8)
-					d.ImageOptions(name, margin+indent, d.GetY(), w, h, true, fpdf.ImageOptions{ImageType: t}, 0, "")
-					d.Ln(1.2)
-					d.caption(v, indent)
-					return
-				}
-				d.ClearError()
-			}
-		}
+	if pic, ok := d.picture(v, indent); ok {
+		d.need(pic.h + 8)
+		d.ImageOptions(pic.name, margin+indent, d.GetY(), pic.w, pic.h, true, fpdf.ImageOptions{ImageType: pic.kind}, 0, "")
+		d.Ln(1.2)
+		d.caption(v, indent)
+		return
 	}
 	d.need(badgeH * 2)
 	d.SetX(margin + indent)
@@ -770,6 +938,9 @@ func (d *doc) cover() {
 	if d.in.Revision > 1 {
 		eyebrow += fmt.Sprintf("  rev %d", d.in.Revision)
 	}
+	if n := len(d.in.Doc.Findings); d.in.Of > n {
+		eyebrow += fmt.Sprintf("  %d of %d findings", n, d.in.Of)
+	}
 	d.label(eyebrow, muted)
 	d.Ln(2)
 	d.mono(19)
@@ -785,23 +956,65 @@ func (d *doc) cover() {
 		repoWord = "site"
 	}
 	d.fact(repoWord, pin.Repo, fg)
-	if pin.Commit != "" {
+	// A site has no commit of its own; its repositories carry theirs.
+	if pin.Commit != "" && !d.words.web {
 		c := pin.Commit
 		if pin.BaseSHA != "" {
 			c = pin.BaseSHA + ".." + c
 		}
 		d.fact("commit", c, muted)
 	}
-	for _, p := range pin.Programs {
-		x := d.fact(d.words.program, p.ID, fg)
-		d.SetXY(x+1.5, d.GetY()-smallLH)
-		d.badge(matchWord[p.Match], matchTone[p.Match])
-		if p.Slot > 0 {
-			d.SetX(d.GetX() + 2)
+	// A web pin is the live site; a source pin without programs is the
+	// source alone. Neither is a program missing.
+	if len(pin.Programs) == 0 {
+		d.SetX(margin + 18)
+		if d.words.web {
+			d.badge("live site", neutral)
+		} else {
+			d.badge("source only", neutral)
+		}
+		d.Ln(smallLH)
+	}
+	// The pinned components, the ones with the most findings first; past
+	// the first three the rest are a count, unless every one was asked for.
+	ranked := d.in.Ranked
+	if ranked == nil {
+		ranked = d.in.Doc.Findings
+	}
+	items := scopeItems(pin, ranked)
+	shown := items
+	if !d.in.FullScope && len(items) > shownScope+1 {
+		shown = items[:shownScope]
+	}
+	for _, it := range shown {
+		if it.program != nil {
+			p := it.program
+			x := d.fact(d.words.program, p.ID, fg)
+			d.SetXY(x+1.5, d.GetY()-smallLH)
+			d.badge(matchWord[p.Match], matchTone[p.Match])
+			if p.Slot > 0 {
+				d.SetX(d.GetX() + 2)
+				d.mono(6.8)
+				d.ink(faint)
+				d.CellFormat(d.GetStringWidth(fmt.Sprintf("%s %d", d.words.height, p.Slot))+2, badgeH, fmt.Sprintf("%s %d", d.words.height, p.Slot), "", 0, "L", false, 0, "")
+			}
+		} else {
+			x := d.fact("repo", it.repo.Name, fg)
+			d.SetXY(x+2, d.GetY()-smallLH)
 			d.mono(6.8)
 			d.ink(faint)
-			d.CellFormat(0, badgeH, fmt.Sprintf("%s %d", d.words.height, p.Slot), "", 0, "L", false, 0, "")
+			d.CellFormat(d.GetStringWidth("commit "+it.repo.Commit)+2, smallLH, "commit "+it.repo.Commit, "", 0, "L", false, 0, "")
 		}
+		if it.count > 0 {
+			d.mono(6.8)
+			d.ink(faint)
+			d.CellFormat(0, smallLH, fmt.Sprint(it.count), "", 0, "L", false, 0, "")
+		}
+		d.Ln(smallLH)
+	}
+	if len(shown) < len(items) {
+		d.SetX(margin + 18)
+		d.badge(fmt.Sprintf("%d others", len(items)-len(shown)), neutral)
 		d.Ln(smallLH)
 	}
 	if len(pin.Excluded) > 0 {
@@ -1011,47 +1224,33 @@ func (d *doc) ordered() (findings, archived []core.Finding) {
 
 // ---------- the findings ----------
 
+// findings sets each finding from the top of its own page, under its
+// severity; the archived ones follow under their own word.
 func (d *doc) findings() {
 	findings, archived := d.ordered()
-	if len(findings)+len(archived) == 0 {
-		return
-	}
-	d.AddPage()
-	var last core.Severity
 	for _, f := range findings {
-		if f.Severity != last {
-			d.need(40)
-			if last != "" {
-				d.Ln(4)
-			}
-			d.mono(7.4)
-			d.SetX(margin)
-			d.badge(string(f.Severity), severityTone[f.Severity])
-			d.Ln(badgeH + 3)
-			last = f.Severity
-		}
+		d.AddPage()
+		d.SetX(margin)
+		d.badge(string(f.Severity), severityTone[f.Severity])
+		d.Ln(badgeH + 4)
 		d.finding(f)
 	}
-	if len(archived) > 0 {
-		d.need(40)
-		d.Ln(4)
+	for _, f := range archived {
+		d.AddPage()
 		d.SetX(margin)
 		d.badge("archived", pending)
-		d.Ln(badgeH + 3)
-		for _, f := range archived {
-			d.finding(f)
-		}
+		d.Ln(badgeH + 4)
+		d.finding(f)
 	}
 }
 
 func (d *doc) finding(f core.Finding) {
-	d.need(42)
 	d.SetLink(d.links[f.Ordinal], -1, -1)
 	d.line(border)
 	d.SetLineWidth(0.2)
 	y := d.GetY()
 	d.Line(margin, y, right, y)
-	d.Ln(3.5)
+	d.Ln(5)
 
 	// Header: ordinal and title, the rating and the status at the corner.
 	d.mono(6.8)
@@ -1071,7 +1270,7 @@ func (d *doc) finding(f core.Finding) {
 	d.SetX(d.GetX() + 2)
 	d.badge(string(f.Status), statusTone[f.Status])
 	d.SetXY(margin, after)
-	d.Ln(1.5)
+	d.Ln(3)
 
 	// Facts: the scope the finding sits in, who reaches it, what proved it.
 	var items []chip
@@ -1123,7 +1322,7 @@ func (d *doc) finding(f core.Finding) {
 	}
 	if len(items) > 0 {
 		d.chips(items, 0)
-		d.Ln(0.5)
+		d.Ln(1.5)
 	}
 
 	// What the reproduction ruled out: one dot per item, filled when done.
@@ -1193,11 +1392,11 @@ func (d *doc) finding(f core.Finding) {
 	// The chain: how the code is used, what it promises, where it breaks,
 	// what that costs.
 	if f.NormalUse != "" {
-		d.section("normal use", muted)
+		d.section("normal use", muted, d.lead(f.NormalUse))
 		d.prose(f.NormalUse, proseOpt{})
 	}
 	if f.Expected != "" {
-		d.section("expected", muted)
+		d.section("expected", muted, d.lead(f.Expected))
 		d.prose(f.Expected, proseOpt{})
 	}
 	steps := []core.Site{{Location: f.Location, Snippet: f.Snippet}}
@@ -1208,8 +1407,21 @@ func (d *doc) finding(f core.Finding) {
 		if f.SitesKind != "" && len(f.Sites) > 0 {
 			word = string(f.SitesKind)
 		}
-		d.section(word, muted)
+		// A step and what it shows stay on one page: the words that speak
+		// of a capture have the capture under them.
+		height := func(s core.Site) float64 {
+			h := d.snippetHeight(s.Location, s.Snippet, s.Note, 0)
+			for _, v := range s.Visuals {
+				h += d.visualHeight(v, 0)
+			}
+			if len(steps) > 1 {
+				h += 3.4
+			}
+			return h
+		}
+		d.section(word, muted, height(steps[0]))
 		for i, s := range steps {
+			d.keep(height(s))
 			if len(steps) > 1 {
 				d.mono(labelPt)
 				d.ink(faint)
@@ -1223,22 +1435,28 @@ func (d *doc) finding(f core.Finding) {
 		}
 	}
 	if f.Impact != "" || len(f.Visuals) > 0 {
-		d.section("impact", muted)
+		// The impact and its first picture stay together: the words that
+		// speak of it have it under them.
+		h := d.proseHeight(f.Impact, 0)
+		if len(f.Visuals) > 0 {
+			h += d.visualHeight(f.Visuals[0], 0)
+		}
+		d.section("impact", muted, h)
 		d.prose(f.Impact, proseOpt{})
 		for _, v := range f.Visuals {
 			d.visual(v, 0)
 		}
 	}
 	if f.ExploitPath != "" {
-		d.section("exploit path", badInk)
+		d.section("exploit path", badInk, d.lead(f.ExploitPath))
 		d.prose(f.ExploitPath, proseOpt{})
 	}
 	if f.Fix != "" {
-		d.section("fix", okInk)
+		d.section("fix", okInk, d.lead(f.Fix))
 		d.prose(f.Fix, proseOpt{fix: true, sites: f.FixSites})
 	}
 	if len(f.References) > 0 {
-		d.section("references", muted)
+		d.section("references", muted, smallLH*2)
 		codeFor := map[string]core.ReferenceCode{}
 		for _, rc := range f.ReferenceCode {
 			codeFor[rc.URL] = rc
@@ -1266,11 +1484,28 @@ func (d *doc) finding(f core.Finding) {
 	d.Ln(4)
 }
 
-func (d *doc) section(name string, c rgb) {
-	d.need(bodyLH * 3)
-	d.Ln(0.6)
+// section sets a caps label over what follows. lead is the height of the
+// first block under it, so the label never stays behind on a page the
+// block has left.
+func (d *doc) section(name string, c rgb, lead float64) {
+	d.keep(6 + lead)
+	d.Ln(1.6)
 	d.label(name, c)
-	d.Ln(0.8)
+	d.Ln(1.2)
+}
+
+// lead is what the first block of prose takes: enough to keep a label
+// with its text without forcing the whole of it onto one page.
+func (d *doc) lead(text string) float64 {
+	blocks, err := core.ProseBlocks(strings.TrimSpace(text))
+	if err != nil || len(blocks) == 0 {
+		return d.proseHeight(text, 0)
+	}
+	b := blocks[0]
+	if b.Code {
+		return d.proseHeight("```\n"+b.Text+"\n```", 0)
+	}
+	return d.proseHeight(b.Text, 0)
 }
 
 // history sets every re-rating and status move on the finding, newest
@@ -1342,4 +1577,50 @@ func hostOf(u string) string {
 		s = s[:i]
 	}
 	return strings.ToLower(s)
+}
+
+// shownScope is how many pinned components the cover lists before the
+// rest fold into a count.
+const shownScope = 3
+
+// A scopeItem is one pinned component with the findings that sit in it.
+type scopeItem struct {
+	program *core.ProgramPin
+	repo    *core.PinRepo
+	count   int
+}
+
+// scopeItems lists the pin's programs and repositories with the most
+// findings first: a program by its address, a repository by the package
+// that names it or the path under it.
+func scopeItems(pin core.Pin, findings []core.Finding) []scopeItem {
+	var items []scopeItem
+	for i := range pin.Programs {
+		p := &pin.Programs[i]
+		n := 0
+		for _, f := range findings {
+			if f.Location.ProgramID == p.ID {
+				n++
+			}
+		}
+		items = append(items, scopeItem{program: p, count: n})
+	}
+	for i := range pin.Repos {
+		r := &pin.Repos[i]
+		n := 0
+		for _, f := range findings {
+			if f.Location.Package == r.Name || strings.HasPrefix(f.Location.Package, r.Name+" ") || strings.HasPrefix(f.Location.File, r.Name+"/") {
+				n++
+			}
+		}
+		items = append(items, scopeItem{repo: r, count: n})
+	}
+	sort.SliceStable(items, func(i, j int) bool { return items[i].count > items[j].count })
+	return items
+}
+
+// leftMargin is where a line starts right now, the bullet indent included.
+func (d *doc) leftMargin() float64 {
+	l, _, _, _ := d.GetMargins()
+	return l
 }

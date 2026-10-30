@@ -108,7 +108,14 @@ func serve() {
 			}
 		}
 		go (&jobs.SurfaceMapper{Store: st, GitHub: d.GitHub, Builders: map[string]core.SurfaceBuilder{solana.Key: builder, ethereum.Key: eth}, Inspectors: inspectors}).Loop(ctx)
-		go (&jobs.Watch{Store: st, Notifier: d.Notifier, Watchers: map[string]core.Watcher{solana.Key: &solana.Watcher{SurfaceBuilder: builder, URLs: cfg.RPCURLs}, ethereum.Key: eth}}).Loop(ctx)
+		// The live watch opens a chain session per watchable audit the
+		// moment the process is up; VIG_WATCH=0 keeps a dev process off
+		// the network until something asks for it.
+		if os.Getenv("VIG_WATCH") != "0" {
+			go (&jobs.Watch{Store: st, Notifier: d.Notifier, Watchers: map[string]core.Watcher{solana.Key: &solana.Watcher{SurfaceBuilder: builder, URLs: cfg.RPCURLs}, ethereum.Key: eth}}).Loop(ctx)
+		} else {
+			slog.Info("live watch off", "env", "VIG_WATCH=0")
+		}
 	}
 
 	srv := &http.Server{

@@ -348,7 +348,8 @@ Go, chi router, huma for typed handlers and OpenAPI 3.1 generation, Scalar serve
 POST /v1/scans                       anonymous, rate limited
 GET  /v1/scans/{token}
 GET  /v1/reports/{slug}              published only
-GET  /v1/reports/{slug}/report.pdf   the published report on paper
+GET  /v1/reports/{slug}/report.json  the published report's findings document; same ?findings
+GET  /v1/reports/{slug}/report.pdf   the published report on paper; same ?findings
 GET  /v1/plans                       pricing table (source of truth for the UI)
 GET  /v1/findings/shape              required, recommended and optional finding fields, the rules, a filled example (§9)
 ```
@@ -389,8 +390,8 @@ PATCH /v1/audits/{id}/report/findings/{fid}   status
 POST /v1/audits/{id}/report/publish  DELETE to unpublish
 PATCH /v1/audits/{id}/report/findings/{fid}            status, reason (required for archived) → finding; the move joins its history
 PATCH /v1/audits/{id}/report/findings/{fid}/severity   severity, reason → finding; the change joins its history, the summary follows
-GET  /v1/audits/{id}/report.json
-GET  /v1/audits/{id}/report.pdf      the same document on paper, drawn by the server
+GET  /v1/audits/{id}/report.json     ?findings=1,3 keeps those ordinals; absent keeps every finding. ?without=methods,scope,ruled_out,history,code,attachments,references,known leaves parts out; ?renumber=true numbers the kept findings 1 upward in reading order
+GET  /v1/audits/{id}/report.pdf      the same document on paper, drawn by the server; same ?findings
 
 POST /v1/purchases                   sku → memo nonce, amount, treasury
 POST /v1/purchases/{id}/confirm      tx signature
@@ -425,8 +426,8 @@ DELETE /v1/admin/audits/{id}         reason optional → receipt (events, report
 POST /v1/admin/audits/delete         ids[], reason optional → {deleted[], failed[]}; one click on the list for any number of ticked rows
 GET  /v1/admin/audits/{id}/report.json
 POST /v1/admin/audits/{id}/visuals   attachment bytes (base64) for a revision → the reference §9 carries
-POST /v1/admin/audits/{id}/report/check  findings document → {valid, errors, advice}; nothing stored
-POST /v1/admin/audits/{id}/report    findings document → new revision
+POST /v1/admin/audits/{id}/report/check  findings document → {valid, errors, advice}; nothing stored   ?reason= is required: why this version is made; the report carries its trail as revisions
+POST /v1/admin/audits/{id}/report    findings document, ?reason= required → new revision; the report carries its trail as revisions
 PATCH /v1/admin/audits/{id}/report/findings/{fid}            status, reason → finding, as admin
 PATCH /v1/admin/audits/{id}/report/findings/{fid}/severity   severity, reason → finding, as admin
 GET  /v1/admin/lessons               repo, limit → every archive and re-rating with its reason, newest first

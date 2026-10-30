@@ -26,6 +26,7 @@ app:
   siteUrl: ""
   logFormat: json
   workers: true           # VIG_WORKERS: run the scan runner and housekeeping in this pod
+  watch: true             # VIG_WATCH: open live chain sessions for watchable audits in this pod
   treasuryPubkey: ""      # TREASURY_PUBKEY: USDC destination for credit purchases
   usdcMint: EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v
   rpcFallbackUrl: https://api.mainnet-beta.solana.com

@@ -56,8 +56,14 @@ seed: $(ENV_BACKEND) ## Write the development dataset (idempotent, refuses in pr
 
 # ---- dev loop ----
 
+# The live chain watch is off for a dev process (VIG_WATCH=0): a local
+# database full of old audits would open a session to mainnet per audit on
+# every start. `make dev-backend VIG_WATCH=1` turns it on.
+VIG_WATCH ?= 0
+
 dev-backend: $(ENV_BACKEND) ## Run the API on :7112 with docs at /docs
-	@set -a; source $(ENV_BACKEND); set +a; cd backend && PORT=$(BACKEND_PORT) go run ./cmd/vig
+	@p=$$(lsof -tiTCP:$(BACKEND_PORT) -sTCP:LISTEN); [ -z "$$p" ] || { echo "stopping the API still on :$(BACKEND_PORT) (pid $$p)"; kill $$p; sleep 1; }
+	@set -a; source $(ENV_BACKEND); set +a; cd backend && PORT=$(BACKEND_PORT) VIG_WATCH=$(VIG_WATCH) go run ./cmd/vig
 
 dev-frontend: ## Run Vite on :7111
 	cd frontend && npm run dev -- --port $(FRONTEND_PORT)

@@ -268,10 +268,15 @@ func (d *Deps) mountOG(r chi.Router) {
 		for _, p := range rep.Pin.Programs {
 			states = append(states, string(p.Match))
 		}
-		img, err := og.Render(og.Report{
+		in := og.Report{
 			Repo: rep.Pin.Repo, Commit: rep.Pin.Commit, Programs: len(rep.Pin.Programs), Adapter: rep.Adapter, Match: og.WorstMatch(states),
 			Critical: rep.Summary.Critical, High: rep.Summary.High, Medium: rep.Summary.Medium, Low: rep.Summary.Low, Info: rep.Summary.Info,
-		})
+		}
+		// A site has no commit of its own: its line is its repositories, live.
+		if rep.Adapter == "webapp" {
+			in.Commit, in.Programs, in.Match = "", len(rep.Pin.Repos), "live"
+		}
+		img, err := og.Render(in)
 		if err != nil {
 			writeProblem(w, r, http.StatusInternalServerError, "render failed")
 			return

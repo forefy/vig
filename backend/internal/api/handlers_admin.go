@@ -125,8 +125,9 @@ type DeletedAudit struct {
 }
 
 type adminReviseIn struct {
-	ID   string `path:"id"`
-	Body core.FindingsDocument
+	ID     string `path:"id"`
+	Reason string `query:"reason" minLength:"3" maxLength:"140" doc:"Why this version is made; shown on the report's revision trail" example:"re-tested after the fix landed"`
+	Body   core.FindingsDocument
 }
 
 type impersonateIn struct {
@@ -468,12 +469,16 @@ func (d *Deps) adminReviseReport(ctx context.Context, in *adminReviseIn) (*body[
 		}
 		d.GitHub.CaptureReferences(ctx, &doc)
 	}
-	rev, err := d.Store.ReviseReport(ctx, a.ID, doc, principal(ctx).UserID)
+	reason := strings.TrimSpace(in.Reason)
+	if len(reason) < 3 {
+		return nil, huma.Error422UnprocessableEntity("a revision needs a reason")
+	}
+	rev, err := d.Store.ReviseReport(ctx, a.ID, doc, principal(ctx).UserID, reason)
 	if err != nil {
 		return nil, fail(err)
 	}
 	d.extendWebSurface(ctx, a, doc.Findings)
-	if _, err := d.logAdmin(ctx, "report.revise", "audit", a.ID, map[string]any{"report_id": rev.Report.ID, "revision": rev.Report.Revision, "added": rev.Added, "removed": rev.Removed, "kept": rev.Kept}); err != nil {
+	if _, err := d.logAdmin(ctx, "report.revise", "audit", a.ID, map[string]any{"report_id": rev.Report.ID, "revision": rev.Report.Revision, "reason": reason, "added": rev.Added, "removed": rev.Removed, "kept": rev.Kept}); err != nil {
 		return nil, fail(err)
 	}
 	d.notify(ctx, a.UserID, "report_revised", map[string]any{"audit_id": a.ID, "revision": rev.Report.Revision, "added": rev.Added, "removed": rev.Removed})

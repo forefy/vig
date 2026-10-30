@@ -25,8 +25,22 @@ type Report struct {
 	CreatedAt     time.Time
 	Revision      int    // 1 for the delivered report, +1 per revision
 	Supersedes    string // the version this one replaced, when revised
+	Reason        string // why this version was made; empty on the first
 	Known         []core.Known
 	Findings      []Finding
+	// Revisions is every version of this audit's report, newest first,
+	// with why it was made and what it changed.
+	Revisions []RevisionNote
+}
+
+// RevisionNote is one version of a report on the audit's trail.
+type RevisionNote struct {
+	Revision int
+	Reason   string
+	At       time.Time
+	Added    int
+	Removed  int
+	Kept     int
 }
 
 // Finding is a findings row.
@@ -198,7 +212,7 @@ type Revision struct {
 // the public slug. A finding that names its predecessor (carried_from_id)
 // or shares its title and file keeps that finding's status and, when it
 // brings none, its snippet, since the checkout is gone by now.
-func (s *Store) ReviseReport(ctx context.Context, auditID string, doc core.FindingsDocument, adminID string) (Revision, error) {
+func (s *Store) ReviseReport(ctx context.Context, auditID string, doc core.FindingsDocument, adminID, reason string) (Revision, error) {
 	if err := doc.Validate(); err != nil {
 		return Revision{}, ErrBadTransition{Err: err}
 	}
@@ -246,8 +260,8 @@ func (s *Store) ReviseReport(ctx context.Context, auditID string, doc core.Findi
 		if _, err := tx.Exec(ctx, `update reports set published_slug=null, published_at=null where id=$1`, a.ReportID); err != nil {
 			return err
 		}
-		if _, err := tx.Exec(ctx, `insert into reports(id, audit_id, pin, summary, methods, revision, supersedes, published_slug, published_at, known) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-			reportID, auditID, pin, summary, methods, prevRevision+1, a.ReportID, slug, publishedAt, known); err != nil {
+		if _, err := tx.Exec(ctx, `insert into reports(id, audit_id, pin, summary, methods, revision, supersedes, published_slug, published_at, known, revision_reason) values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+			reportID, auditID, pin, summary, methods, prevRevision+1, a.ReportID, slug, publishedAt, known, reason); err != nil {
 			return wrap(err)
 		}
 		matched := map[string]bool{}
@@ -307,7 +321,7 @@ func (s *Store) ReviseReport(ctx context.Context, auditID string, doc core.Findi
 			return err
 		}
 		return s.AddEvent(ctx, tx, AuditEvent{AuditID: auditID, Kind: "report_revised", Actor: "system", ActorID: adminID, State: a.State,
-			Payload: map[string]any{"report_id": reportID, "revision": prevRevision + 1, "findings": len(doc.Findings), "added": out.Added, "removed": out.Removed, "kept": out.Kept, "summary": doc.Report.Summary}})
+			Payload: map[string]any{"report_id": reportID, "revision": prevRevision + 1, "reason": reason, "findings": len(doc.Findings), "added": out.Added, "removed": out.Removed, "kept": out.Kept, "summary": doc.Report.Summary}})
 	})
 	if err != nil {
 		return Revision{}, err
@@ -320,14 +334,14 @@ func (s *Store) ReviseReport(ctx context.Context, auditID string, doc core.Findi
 	return out, nil
 }
 
-const reportCols = `r.id, r.audit_id, r.pin, r.summary, r.methods, coalesce(r.published_slug,''), r.published_at, r.created_at, t.adapter, r.revision, coalesce(r.supersedes::text,''), r.known`
+const reportCols = `r.id, r.audit_id, r.pin, r.summary, r.methods, coalesce(r.published_slug,''), r.published_at, r.created_at, t.adapter, r.revision, coalesce(r.supersedes::text,''), r.known, r.revision_reason`
 
 const reportFrom = ` from reports r join audits a on a.id=r.audit_id join targets t on t.id=a.target_id `
 
 func (s *Store) scanReport(ctx context.Context, row pgx.Row) (Report, error) {
 	var r Report
 	var pin, summary, methods, known []byte
-	if err := row.Scan(&r.ID, &r.AuditID, &pin, &summary, &methods, &r.PublishedSlug, &r.PublishedAt, &r.CreatedAt, &r.Adapter, &r.Revision, &r.Supersedes, &known); err != nil {
+	if err := row.Scan(&r.ID, &r.AuditID, &pin, &summary, &methods, &r.PublishedSlug, &r.PublishedAt, &r.CreatedAt, &r.Adapter, &r.Revision, &r.Supersedes, &known, &r.Reason); err != nil {
 		return r, wrap(err)
 	}
 	_ = json.Unmarshal(pin, &r.Pin)
@@ -344,7 +358,38 @@ func (s *Store) scanReport(ctx context.Context, row pgx.Row) (Report, error) {
 		return r, err
 	}
 	r.Findings = fs
+	if r.Revision > 1 {
+		r.Revisions, err = s.listRevisions(ctx, r.AuditID)
+		if err != nil {
+			return r, err
+		}
+	}
 	return r, nil
+}
+
+// listRevisions is the trail of an audit's report, newest first: every
+// version with its reason and, from the event it made, what it changed.
+func (s *Store) listRevisions(ctx context.Context, auditID string) ([]RevisionNote, error) {
+	rows, err := s.Pool.Query(ctx, `select r.revision, r.revision_reason, r.created_at,
+		coalesce((select e.payload from audit_events e where e.audit_id=r.audit_id and e.kind='report_revised' and e.payload->>'report_id'=r.id::text order by e.created_at desc limit 1), '{}'::jsonb)
+		from reports r where r.audit_id=$1 order by r.revision desc`, auditID)
+	if err != nil {
+		return nil, wrap(err)
+	}
+	defer rows.Close()
+	var out []RevisionNote
+	for rows.Next() {
+		var n RevisionNote
+		var payload []byte
+		if err := rows.Scan(&n.Revision, &n.Reason, &n.At, &payload); err != nil {
+			return nil, wrap(err)
+		}
+		var p struct{ Added, Removed, Kept int }
+		_ = json.Unmarshal(payload, &p)
+		n.Added, n.Removed, n.Kept = p.Added, p.Removed, p.Kept
+		out = append(out, n)
+	}
+	return out, rows.Err()
 }
 
 // GetReport fetches a report with findings.

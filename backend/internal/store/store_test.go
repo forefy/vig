@@ -514,7 +514,7 @@ func TestAdminCancelHideAndRevise(t *testing.T) {
 	if err := f.s.Publish(f.ctx, r1.ID, "acme-vault"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.s.ReviseReport(f.ctx, "not-an-id", doc, f.user.ID); err == nil {
+	if _, err := f.s.ReviseReport(f.ctx, "not-an-id", doc, f.user.ID, "re-tested after the fix"); err == nil {
 		t.Fatal("revising a missing audit succeeded")
 	}
 	// Revision: one finding kept by title and file (status and snippet follow),
@@ -524,7 +524,7 @@ func TestAdminCancelHideAndRevise(t *testing.T) {
 		{Ordinal: 1, Severity: core.SeverityMedium, Title: "Missing signer", Location: core.Location{File: "src/lib.rs", LineStart: 5}, Description: "d2", Fix: "- f2", FixKind: core.FixOperational},
 		{Ordinal: 2, Severity: core.SeverityInfo, Title: "Closed orders kept", Location: core.Location{File: "src/lib.rs", LineStart: 20}, Description: "d", Fix: "- f", FixKind: core.FixOperational},
 	}
-	out, err := f.s.ReviseReport(f.ctx, a.ID, rev, f.user.ID)
+	out, err := f.s.ReviseReport(f.ctx, a.ID, rev, f.user.ID, "re-tested after the fix")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -810,7 +810,7 @@ func TestSeverityHistoryFollowsRevisions(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	rev, err := f.s.ReviseReport(f.ctx, a.ID, doc, f.user.ID)
+	rev, err := f.s.ReviseReport(f.ctx, a.ID, doc, f.user.ID, "re-tested after the fix")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -907,7 +907,7 @@ func TestRevisionFollowsIDWhenRetitled(t *testing.T) {
 	doc.Findings[0].Location.File = "b.py"
 	doc.Findings[0].Severity = core.SeverityMedium
 	doc.Findings[0].CarriedFromID = r.Findings[0].ID
-	rev, err := f.s.ReviseReport(f.ctx, a.ID, doc, f.user.ID)
+	rev, err := f.s.ReviseReport(f.ctx, a.ID, doc, f.user.ID, "re-tested after the fix")
 	if err != nil {
 		t.Fatal(err)
 	}

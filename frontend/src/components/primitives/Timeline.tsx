@@ -150,7 +150,7 @@ function EventRow({ event: e, kindName, words }: { event: AuditEvent; kindName: 
       {e.kind === 'surface_extended' && typeof p.added === 'number' && <StateBadge state="ok" className="h-5 px-1.5 text-[10.5px]">+{p.added} nodes</StateBadge>}
       {e.kind === 'surface_drift' && <StateBadge state={p.kind === 'idl' ? 'warn' : 'bad'} className="h-5 px-1.5 text-[10.5px]">{p.kind === 'idl' ? 'interface changed' : 'upgraded'}{typeof p.program === 'string' ? ` · ${p.program.slice(0, 4)}…${p.program.slice(-4)}` : ''}</StateBadge>}
       {(e.kind === 'failed' || e.kind === 'cancelled') && (typeof p.refund_ledger_id === 'string' || p.slot_restored === true) && <StateBadge state="ok" className="h-5 px-1.5 text-[10.5px]">restored</StateBadge>}
-      {e.kind === 'report_revised' && typeof p.revision === 'number' && <StateBadge state="warn" className="h-5 px-1.5 text-[10.5px]">rev {p.revision}{typeof p.added === 'number' && typeof p.removed === 'number' ? ` · +${p.added} −${p.removed}` : ''}</StateBadge>}
+      {e.kind === 'report_revised' && typeof p.revision === 'number' && <StateBadge state="warn" className="h-5 px-1.5 text-[10.5px]" tip={typeof p.reason === 'string' && p.reason ? p.reason : undefined}>rev {p.revision}{typeof p.added === 'number' && typeof p.removed === 'number' ? ` · +${p.added} −${p.removed}` : ''}</StateBadge>}
       <span className="num ml-auto text-[11px] text-faint">{relTime(e.created_at)}</span>
     </li>
   )

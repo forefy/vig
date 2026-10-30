@@ -255,12 +255,16 @@ func (d *Deps) getReport(ctx context.Context, in *idPath) (*body[Report], error)
 	return &body[Report]{Body: toReport(r, owner)}, nil
 }
 
-func (d *Deps) exportReport(ctx context.Context, in *idPath) (*body[core.FindingsDocument], error) {
+func (d *Deps) exportReport(ctx context.Context, in *exportPath) (*body[core.FindingsDocument], error) {
 	r, _, owner, err := d.reportFor(ctx, in.ID)
 	if err != nil {
 		return nil, err
 	}
-	return &body[core.FindingsDocument]{Body: toReport(r, owner).Document}, nil
+	rep, _, err := in.selection().cut(r, owner)
+	if err != nil {
+		return nil, err
+	}
+	return &body[core.FindingsDocument]{Body: rep.Document}, nil
 }
 
 func (d *Deps) setFindingStatus(ctx context.Context, in *findingStatusIn) (*body[core.Finding], error) {

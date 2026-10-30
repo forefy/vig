@@ -28,6 +28,7 @@ Solana program audit service sold as credits. Read SPEC.md before doing anything
 - Every audit state change is an audit_events row; the user timeline renders those rows and nothing else.
 - Ledger is append-only. Balance is derived, never edited.
 - Corrections to a delivered finding are never deleted: archiving takes a reason and keeps the finding visible, re-rating takes a reason, and both histories stay on the finding and surface as lessons on the next job for the same repository.
+- A revision of a report takes a reason too (`?reason=` on the admin revise call); the report carries every version with its reason as `revisions`, shown on the rev badge.
 - The generated TypeScript client lives in frontend/src/api/generated and is committed; `make gen` regenerates it from backend/openapi.json and CI fails on drift. Do not hand-edit it.
 - Layouts come from the five archetypes in SPEC.md §13. Add a sixth only with a written reason in docs/decisions.md.
 - Semantic colors (verified, caution, mismatch) are separate tokens from the accent.
@@ -42,6 +43,7 @@ Follow SPEC.md §18. Phase 0 (contract: types, state machine, ledger rules, adap
 
 ## Local dev
 - `make setup` installs tooling; `make dev` runs backend on :7112 and frontend on :7111.
+- A dev backend runs with `VIG_WATCH=0`: no live chain sessions, so nothing reaches Solana on start. `make dev-backend VIG_WATCH=1` turns the watch on; `VIG_WORKERS=0` turns every background loop off.
 - Secrets: `make decrypt-env` after you have a GPG key added to .gitsecret. Env files live in secrets/ and are committed encrypted only.
 - Postgres locally via docker compose (deploy/local/compose.yaml). No SQLite.
 
