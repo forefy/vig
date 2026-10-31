@@ -1,8 +1,9 @@
 -- title: Handlers reaching dangerous sinks
--- description: Request handlers (is_handler) whose call graph reaches, within N hops (0 = the handler itself, at most 6), a function that calls a sink such as exec, eval, query or spawn. A recursive walk over the calls edges that never revisits a function.
+-- description: Request handlers (is_handler) whose call graph, over call edges at or above min_confidence (1 = resolved through the same file or an import, 0.6 adds matches by name alone), reaches, within N hops (0 = the handler itself, at most 6), a function that calls a sink such as exec, eval, query or spawn. A recursive walk over the calls edges that never revisits a function.
 -- view: table
 -- param: target
 -- param: max_hops 4 int
+-- param: min_confidence 1 raw
 -- param: sink_pattern (exec|eval|spawn|system|popen|query|execute|deserialize|pickle|yaml\.load) str
 WITH RECURSIVE sinks AS (
   SELECT DISTINCT caller_fn AS fn_id, callee_name
@@ -11,7 +12,7 @@ WITH RECURSIVE sinks AS (
   SELECT fn_id, qualname, repo, path FROM functions WHERE target = {{target}} AND is_handler
 ), call_edges AS (
   SELECT DISTINCT src_id, dst_id FROM edges
-  WHERE target = {{target}} AND rel = 'calls' AND src_id IS NOT NULL AND dst_id IS NOT NULL
+  WHERE target = {{target}} AND rel = 'calls' AND src_id IS NOT NULL AND dst_id IS NOT NULL AND confidence >= {{min_confidence}}
 ), walk AS (
   SELECT 'fn:' || fn_id AS src, 'fn:' || fn_id AS dst, 0 AS hops, ['fn:' || fn_id] AS seen FROM handlers
   UNION ALL

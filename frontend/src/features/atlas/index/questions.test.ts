@@ -94,10 +94,10 @@ describe('renderQuestion', () => {
 })
 
 describe('QUESTIONS', () => {
-  it('ships eleven questions, each over one target, none needing the graph extension', () => {
+  it('ships fourteen questions, each over one target, none needing the graph extension', () => {
     expect(QUESTIONS.map((q) => q.name).sort()).toEqual([
-      'bodies_from_repos', 'code_mentions_hosts', 'code_mentions_resources', 'dangling_cnames', 'findings_by_repo',
-      'handlers_to_sinks', 'har_hosts', 'neighbors', 'public_resources', 'subdomains_to_cloud', 'target_overview',
+      'bodies_from_repos', 'code_mentions_hosts', 'code_mentions_resources', 'code_resource_subdomain', 'dangling_cnames', 'findings_by_repo',
+      'handler_sink_paths', 'handlers_to_sinks', 'har_hosts', 'host_repo_paths', 'neighbors', 'public_resources', 'subdomains_to_cloud', 'target_overview',
     ])
     for (const q of QUESTIONS) {
       expect(q.params.some((p) => p.name === 'target'), q.name).toBe(true)
@@ -112,8 +112,13 @@ describe('QUESTIONS', () => {
       else expect(go(), q.name).not.toMatch(/\{\{/)
     }
   })
+  it('gives every graph question the edge columns the graph draws from', () => {
+    for (const q of QUESTIONS.filter((x) => x.view === 'graph')) {
+      for (const col of ['src_id', 'dst_id', 'rel']) expect(q.body, `${q.name} ${col}`).toContain(col)
+    }
+  })
   it('bounds the walks to six hops', () => {
-    for (const n of ['handlers_to_sinks', 'neighbors']) {
+    for (const n of ['handlers_to_sinks', 'handler_sink_paths', 'neighbors']) {
       const q = QUESTIONS.find((x) => x.name === n)!
       expect(q.body).toContain('WITH RECURSIVE')
       expect(q.body).toMatch(/least\(\{\{(max_hops|hops)\}\}, 6\)/)

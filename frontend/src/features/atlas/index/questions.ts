@@ -14,6 +14,9 @@ import har_hosts from './questions/har_hosts.sql?raw'
 import bodies_from_repos from './questions/bodies_from_repos.sql?raw'
 import handlers_to_sinks from './questions/handlers_to_sinks.sql?raw'
 import neighbors from './questions/neighbors.sql?raw'
+import handler_sink_paths from './questions/handler_sink_paths.sql?raw'
+import host_repo_paths from './questions/host_repo_paths.sql?raw'
+import code_resource_subdomain from './questions/code_resource_subdomain.sql?raw'
 
 export type ParamType = 'str' | 'int' | 'raw'
 export type Param = { name: string; default: string | null; type: ParamType }
@@ -145,8 +148,13 @@ export function renderQuestion(body: string, params: Param[], values: Record<str
   return out
 }
 
+// Order is the rail's order: graph questions first, then lists.
 const SOURCES: Record<string, string> = {
-  target_overview,
+  handler_sink_paths,
+  host_repo_paths,
+  code_resource_subdomain,
+  neighbors,
+  handlers_to_sinks,
   findings_by_repo,
   code_mentions_hosts,
   code_mentions_resources,
@@ -155,8 +163,7 @@ const SOURCES: Record<string, string> = {
   dangling_cnames,
   har_hosts,
   bodies_from_repos,
-  handlers_to_sinks,
-  neighbors,
+  target_overview,
 }
 
 export const QUESTIONS: Question[] = Object.entries(SOURCES).map(([name, text]) => parseQuestion(name, text))
