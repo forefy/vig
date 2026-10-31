@@ -567,6 +567,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/atlas/index": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Every index across the user's audits, with where each Parquet part is */
+        get: operations["getAtlasIndex"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/audits": {
         parameters: {
             query?: never;
@@ -594,6 +611,23 @@ export interface paths {
         };
         /** Audit with timeline */
         get: operations["getAudit"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/audits/{id}/index": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The audit's index */
+        get: operations["getAuditIndex"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1265,6 +1299,57 @@ export interface paths {
         /** Fail and refund */
         post: operations["failJob"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/op/jobs/{id}/index": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Seal the staged parts as the job's index, replacing any earlier one */
+        post: operations["sealJobIndex"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/op/jobs/{id}/index/parts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Stage one Parquet part of the job's index */
+        put: operations["putJobIndexPart"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/op/jobs/{id}/index/staging": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Discard parts staged and not sealed */
+        delete: operations["dropJobIndexStaging"];
         options?: never;
         head?: never;
         patch?: never;
@@ -2078,6 +2163,15 @@ export interface components {
             url: string;
             version: string;
         };
+        AtlasIndex: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/AtlasIndex.json
+             */
+            readonly $schema?: string;
+            audits: components["schemas"]["IndexBuild"][] | null;
+        };
         Audit: {
             /**
              * Format: uri
@@ -2660,6 +2754,44 @@ export interface components {
             state: string;
             target_id: string;
         };
+        IndexBuild: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/IndexBuild.json
+             */
+            readonly $schema?: string;
+            /** @enum {string} */
+            adapter: "solana" | "ethereum" | "webapp" | "repo";
+            audit_id: string;
+            /** Format: date-time */
+            built_at: string;
+            /** Format: int64 */
+            bytes: number;
+            head_sha: string;
+            repo: string;
+            state: string;
+            tables: components["schemas"]["IndexBuildTable"][] | null;
+            target_id: string;
+            tool: string;
+            tool_version?: string;
+        };
+        IndexBuildPart: {
+            /** Format: int64 */
+            bytes: number;
+            file: string;
+            sha256: string;
+            /** @description Path on this API; sends the Parquet bytes and honours Range */
+            url: string;
+        };
+        IndexBuildTable: {
+            /** Format: int64 */
+            bytes: number;
+            name: string;
+            parts: components["schemas"]["IndexBuildPart"][] | null;
+            /** Format: int64 */
+            rows?: number;
+        };
         IndexFinding: {
             /** Format: int64 */
             ordinal: number;
@@ -2668,6 +2800,18 @@ export interface components {
             /** @enum {string} */
             status: "open" | "acknowledged" | "fixed" | "disputed" | "archived";
             title: string;
+        };
+        IndexManifest: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/IndexManifest.json
+             */
+            readonly $schema?: string;
+            tables: components["schemas"]["IndexTable"][] | null;
+            /** @example zz */
+            tool: string;
+            tool_version?: string;
         };
         IndexNode: {
             /** @enum {string} */
@@ -2696,6 +2840,31 @@ export interface components {
             /** Format: int64 */
             signers?: number;
             source: string;
+        };
+        IndexPart: {
+            /** Format: int64 */
+            bytes: number;
+            /**
+             * @description File name inside the table, as the tool wrote it
+             * @example part-1761900000-ab12cd34.parquet
+             */
+            file: string;
+            sha256: string;
+        };
+        IndexTable: {
+            /** Format: int64 */
+            bytes?: number;
+            /**
+             * @description Table name, lowercase with underscores
+             * @example calls
+             */
+            name: string;
+            parts: components["schemas"]["IndexPart"][] | null;
+            /**
+             * Format: int64
+             * @description Row count when the tool reported one
+             */
+            rows?: number;
         };
         InstallURLBody: {
             /**
@@ -3125,6 +3294,45 @@ export interface components {
              */
             readonly $schema?: string;
             reason: string;
+        };
+        OpIndexPartInBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/OpIndexPartInBody.json
+             */
+            readonly $schema?: string;
+            /** @description The Parquet file, base64 */
+            data_base64: string;
+            /**
+             * @description Part file name
+             * @example part-1761900000-ab12cd34.parquet
+             */
+            file: string;
+            /** @description Digest of the bytes; the upload is refused when it does not match */
+            sha256: string;
+            /**
+             * @description Table the part belongs to
+             * @example calls
+             */
+            table: string;
+        };
+        OpIndexPartOutBody: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/OpIndexPartOutBody.json
+             */
+            readonly $schema?: string;
+            /** Format: int64 */
+            bytes: number;
+            file: string;
+            /**
+             * Format: int64
+             * @description Parts staged for this job so far
+             */
+            staged: number;
+            table: string;
         };
         OpNodesInBody: {
             /**
@@ -5435,6 +5643,35 @@ export interface operations {
             };
         };
     };
+    getAtlasIndex: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AtlasIndex"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     listAudits: {
         parameters: {
             query?: never;
@@ -5515,6 +5752,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Audit"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    getAuditIndex: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IndexBuild"];
                 };
             };
             /** @description Error */
@@ -6915,6 +7183,105 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["Audit"];
                 };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    sealJobIndex: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IndexManifest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IndexBuild"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    putJobIndexPart: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OpIndexPartInBody"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OpIndexPartOutBody"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
+    dropJobIndexStaging: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Error */
             default: {

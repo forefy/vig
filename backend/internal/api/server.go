@@ -49,6 +49,7 @@ func NewRouter(d *Deps) http.Handler {
 	r.Get("/metrics", metricsHandler().ServeHTTP)
 	d.mountOG(r)
 	d.MountVisuals(r)
+	d.MountIndex(r)
 
 	if d.Config.StaticDir != "" {
 		s, err := newStatic(d)

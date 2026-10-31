@@ -66,6 +66,7 @@ func Register(api huma.API, d *Deps) {
 	d.registerBilling(api)
 	d.registerOperator(api)
 	d.registerSurface(api)
+	d.registerIndex(api)
 	d.registerLive(api)
 	d.registerAdmin(api)
 	d.registerVisuals(api)

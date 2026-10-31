@@ -359,6 +359,7 @@ func (d *Deps) deleteAudit(ctx context.Context, id, reason string) (DeletedAudit
 	}
 	a := del.Audit
 	d.dropClone(ctx, a)
+	d.removeIndexFiles(a.ID)
 	if _, err := d.logAdmin(ctx, "audit.delete", "audit", a.ID, map[string]any{"reason": reason, "repo": a.Repo, "user_id": a.UserID, "state": string(a.State),
 		"cost_kind": a.CostKind, "head_sha": a.HeadSHA, "events": del.Events, "reports": del.Reports, "refunded": del.Refunded, "created_at": a.CreatedAt.UTC().Format(time.RFC3339)}); err != nil {
 		return DeletedAudit{}, fail(err)

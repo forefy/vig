@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { Suspense, lazy, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { Helmet } from 'react-helmet-async'
 import { ArrowUpRight } from 'lucide-react'
@@ -14,10 +14,59 @@ import { relTime, cn } from '@/lib/utils'
 import { PLACES, UNDER, key, seen, methodsOf, factValues, nodeText, nodeFacets, wordsFor } from './model'
 import type { IndexNode, IndexAudit } from './model'
 
+// The index view loads DuckDB; it is fetched only when the view opens.
+const IndexView = lazy(() => import('./index/Index').then((m) => ({ default: m.Index })))
+
+type View = 'map' | 'index'
+
+// Atlas has two views of the owner's audits: the maps (`?view=map`, the
+// default) and the indexes (`?view=index`), behind one switch in the header.
+export function Atlas() {
+  const [params] = useSearchParams()
+  const view: View = params.get('view') === 'index' ? 'index' : 'map'
+  if (view === 'map') return <MapView />
+  return (
+    <Page wide>
+      <Helmet><title>Atlas</title></Helmet>
+      <PageHeader eyebrow="atlas" title="Across audits" aside={<ViewSwitch view="index" />} />
+      <Suspense fallback={<SkeletonRows rows={8} />}>
+        <IndexView />
+      </Suspense>
+    </Page>
+  )
+}
+
+function ViewSwitch({ view }: { view: View }) {
+  const [params, setParams] = useSearchParams()
+  const go = (v: View) => {
+    const p = new URLSearchParams(params)
+    if (v === 'map') p.delete('view')
+    else p.set('view', v)
+    p.delete('q')
+    setParams(p, { replace: true })
+  }
+  return (
+    <div role="tablist" aria-label="Atlas view" className="inline-flex h-7 overflow-hidden rounded-md border border-border font-mono text-[11.5px]">
+      {(['map', 'index'] as const).map((v) => (
+        <button
+          key={v}
+          type="button"
+          role="tab"
+          aria-selected={view === v}
+          onClick={() => go(v)}
+          className={cn('px-2.5 text-muted-foreground transition-colors hover:text-foreground', view === v && 'bg-accent text-foreground')}
+        >
+          {v}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 // Ledger archetype: the report's query line over every node of every
 // map, rows folded by target and by the place they hang under, a rail
 // with the rollups, and a sheet for one node with its evidence.
-export function Atlas() {
+function MapView() {
   const q = $api.useQuery('get', '/v1/surface')
   const [params, setParams] = useSearchParams()
   const query = parseQuery(params.get('q') ?? '')
@@ -66,7 +115,8 @@ export function Atlas() {
         eyebrow="atlas"
         title="Across audits"
         aside={
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <ViewSwitch view="map" />
             <StateBadge state="neutral"><span className="num">{targets}</span> targets</StateBadge>
             <StateBadge state="neutral"><span className="num">{audits.length}</span> audits</StateBadge>
             <StateBadge state="neutral"><span className="num">{all.length}</span> nodes</StateBadge>
