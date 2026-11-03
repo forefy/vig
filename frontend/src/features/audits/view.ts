@@ -2,7 +2,7 @@ import { useSearchParams } from 'react-router'
 import { hostOf, placeOf, routeOf, shortRoute } from '@/lib/web'
 import { chainWords } from '@/lib/chain'
 import type { ChainWords } from '@/lib/chain'
-import { countFacet, matches, parseQuery } from '@/components/primitives/query'
+import { countFacet, countMultiFacet, matches, parseQuery } from '@/components/primitives/query'
 import type { Facet as FacetOf, Query } from '@/components/primitives/query'
 import type { components } from '@/api/client'
 
@@ -20,7 +20,7 @@ export function facetsOf(findings: Finding[], words: ChainWords): Facet[] {
   const facet = (key: string, label: string, get: (f: Finding) => string, word: (v: string) => string, orderOf?: readonly string[], ranked = false): Facet => countFacet(findings, key, label, get, word, orderOf, ranked)
   const statuses = ['open', 'acknowledged', 'fixed', 'disputed'] as const
   // Least to most privileged, so the chips read as a ladder.
-  const exploit = ['anyone', 'any_user', 'any_signer', 'account_owner', 'api_key', 'internal_network', 'internal', 'admin', 'upgrade_authority', 'other_program', 'none']
+  const exploit = ['anyone', 'any_user', 'any_signer', 'account_owner', 'api_key', 'internal_network', 'contributor', 'pipeline', 'internal', 'admin', 'upgrade_authority', 'other_program', 'none']
   const short = (p: string) => p.slice(p.lastIndexOf('/') + 1)
   // A file chip shows the base name. When base names collide across the
   // report, the nearest directory that differs is shown beside it, so five
@@ -40,7 +40,8 @@ export function facetsOf(findings: Finding[], words: ChainWords): Facet[] {
   return [
     facet('severity', 'severity', (f) => f.severity, (v) => v, order, true),
     facet('status', 'status', (f) => f.status, (v) => v, statuses),
-    facet('exploitable', 'exploitable by', (f) => f.exploitable_by ?? 'unset', (v) => words.exploitable[v] ?? v, [...exploit, 'unset']),
+    // A finding counts under every actor that can reach it.
+    countMultiFacet(findings, 'exploitable', 'exploitable by', (f) => (f.exploitable_by?.length ? f.exploitable_by : ['unset']), (v) => words.exploitable[v] ?? v, [...exploit, 'unset']),
     facet('evidence', 'evidence', (f) => f.evidence?.kind ?? 'none', (v) => (v === 'onchain' ? 'on-chain' : v), ['static', 'fuzz', 'onchain', 'bytecode', 'live', 'none']),
     facet('tool', 'tool', (f) => f.evidence?.tool ?? 'none', (v) => v),
     // A web finding's place is its endpoint: the host and the route are

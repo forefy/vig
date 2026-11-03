@@ -100,7 +100,7 @@ var (
 	}
 	exploitableTone = map[core.ExploitableBy]tone{
 		"anyone": bad, "any_user": bad, "any_signer": bad,
-		"internal": warn, "account_owner": warn, "api_key": warn, "internal_network": warn, "other_program": warn, "admin": warn, "upgrade_authority": warn,
+		"internal": warn, "contributor": warn, "pipeline": warn, "account_owner": warn, "api_key": warn, "internal_network": warn, "other_program": warn, "admin": warn, "upgrade_authority": warn,
 		"none": neutral,
 	}
 	matchTone = map[core.MatchStatus]tone{"verified": okTone, "self_built": okTone, "mismatch": bad, "unverified": neutral}
@@ -140,7 +140,9 @@ func wordsFor(adapter string) words {
 		exploitable: map[core.ExploitableBy]string{
 			"anyone":            pick("anyone, no account", "anyone", "anyone", "anyone"),
 			"any_user":          pick("any signed-in user", "any user", "any user", "any user"),
-			"internal":          "insider (repo or telemetry)",
+			"internal":          pick("backend insider", "insider", "insider", "insider"),
+			"contributor":       "code contributor",
+			"pipeline":          pick("CI pipeline", "CI pipeline", "CI action", "CI pipeline"),
 			"any_signer":        pick("any session", "any account", "any signer", "any signer"),
 			"account_owner":     pick("account member", "position owner", "account owner", "account owner"),
 			"api_key":           "API key holder",
@@ -1287,16 +1289,22 @@ func (d *doc) finding(f core.Finding) {
 	if loc.ProgramID != "" {
 		items = append(items, chip{kind: d.words.program, text: loc.ProgramID, tone: neutral})
 	}
-	if f.ExploitableBy != "" {
-		w := d.words.exploitable[f.ExploitableBy]
-		if w == "" {
-			w = strings.ReplaceAll(string(f.ExploitableBy), "_", " ")
+	if len(f.ExploitableBy) > 0 {
+		// One chip for everyone who can reach it, toned by the least
+		// privileged of them.
+		words := make([]string, 0, len(f.ExploitableBy))
+		for _, e := range f.ExploitableBy {
+			w := d.words.exploitable[e]
+			if w == "" {
+				w = strings.ReplaceAll(string(e), "_", " ")
+			}
+			words = append(words, w)
 		}
-		t, ok := exploitableTone[f.ExploitableBy]
+		t, ok := exploitableTone[f.ExploitableBy.Least()]
 		if !ok {
 			t = neutral
 		}
-		items = append(items, chip{kind: "exploitable by", text: w, tone: t})
+		items = append(items, chip{kind: "exploitable by", text: strings.Join(words, " · "), tone: t})
 	}
 	if e := f.Evidence; e != nil {
 		word := e.Tool

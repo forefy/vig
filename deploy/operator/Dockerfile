@@ -11,14 +11,16 @@
 #   # inside: vig-op claim && solana-verify build && vig-op verify && ...
 
 # --- Stage 1: vig-op --------------------------------------------------------------
-FROM --platform=$BUILDPLATFORM golang:1.23 AS build
+# The indexer parses source with tree-sitter, so vig-op is a cgo build; it is
+# built on the target platform itself rather than cross-compiled, and runs
+# on the glibc of the toolchain image below.
+FROM golang:1.26 AS build
 WORKDIR /src
 COPY backend/go.mod backend/go.sum ./
 RUN --mount=type=cache,target=/go/pkg/mod go mod download
 COPY backend/ ./
-ARG TARGETOS TARGETARCH
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
-    CGO_ENABLED=0 GOOS=${TARGETOS} GOARCH=${TARGETARCH} go build -trimpath -ldflags "-s -w" -o /out/vig-op ./cmd/vig-op
+    CGO_ENABLED=1 go build -trimpath -ldflags "-s -w" -o /out/vig-op ./cmd/vig-op
 
 # --- Stage 2: Solana toolchain --------------------------------------------------------
 # rust:1 carries cargo; solana-verify and the Anza CLI give reproducible builds

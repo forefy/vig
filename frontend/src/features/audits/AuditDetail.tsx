@@ -140,7 +140,11 @@ export function AuditDetail({ view = 'timeline' }: { view?: 'timeline' | 'surfac
             ) : (
               <Stat label={a.state} value={relTime(a.updated_at, now)} tone={a.state === 'delivered' ? 'ok' : 'bad'} />
             )}
-            <Stat label="scope" value={a.scope.lines.toLocaleString('en-US')} hint={`${(a.scope.files ?? []).length} files`} />
+            {a.scope.lines ? (
+              <Stat label="scope" value={a.scope.lines.toLocaleString('en-US')} hint={`${(a.scope.files ?? []).length} files`} />
+            ) : (
+              <Stat label="scope" value={(a.scope.files ?? []).length.toLocaleString('en-US')} hint="paths" />
+            )}
             <Stat
               label="cost"
               value={a.cost_kind === 'credit' ? '1 credit' : 'daily slot'}

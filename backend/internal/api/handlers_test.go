@@ -92,6 +92,7 @@ func TestRoutesInContract(t *testing.T) {
 		"/v1/me":                             {"get", "patch", "delete"},
 		"/v1/me/sessions":                    {"get", "delete"},
 		"/v1/me/notifications/prefs":         {"patch"},
+		"/v1/me/notifications/read":          {"post"},
 		"/v1/me/totp/enable":                 {"post"},
 		"/v1/me/totp/verify":                 {"post"},
 		"/v1/me/totp/recovery":               {"post"},

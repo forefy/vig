@@ -15,12 +15,12 @@ const audits = () => import('@/features/audits/AuditsList')
 const auditDetail = () => import('@/features/audits/AuditDetail')
 const newAudit = () => import('@/features/audits/NewAudit')
 const report = () => import('@/features/audits/Report')
-const atlas = () => import('@/features/atlas/Atlas')
 const billing = () => import('@/features/billing/Billing')
 const settings = () => import('@/features/settings/Settings')
 const panels = () => import('@/features/settings/Panels')
 const admin = () => import('@/features/admin/Admin')
 const verify = () => import('@/features/admin/Verify')
+const atlas = () => import('@/features/atlas/Atlas')
 
 export const routes = [
   {
@@ -41,8 +41,8 @@ export const routes = [
               { path: '/app/audits', element: lazyRoute(audits, 'AuditsList') },
               { path: '/app/audits/:id', element: lazyRoute(auditDetail, 'AuditDetail') },
               { path: '/app/audits/:id/surface', element: lazyRoute(auditDetail, 'AuditSurfaceView') },
-              { path: '/app/audits/:id/report', element: lazyRoute(report, 'ReportPage') },
               { path: '/app/atlas', element: lazyRoute(atlas, 'Atlas') },
+              { path: '/app/audits/:id/report', element: lazyRoute(report, 'ReportPage') },
               {
                 element: <WalletGate />,
                 children: [

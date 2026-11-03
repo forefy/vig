@@ -149,6 +149,8 @@ const exploitableState: Record<string, 'bad' | 'warn' | 'neutral'> = {
   any_user: 'bad',
   any_signer: 'bad',
   internal: 'warn',
+  contributor: 'warn',
+  pipeline: 'warn',
   account_owner: 'warn',
   api_key: 'warn',
   internal_network: 'warn',
@@ -306,6 +308,27 @@ export function ReportBody({ report, onStatus, onSeverity, surfaceHref }: { repo
     ])
     .sort((a, b) => b.at.localeCompare(a.at))
   const [active, setActive] = useState<number | null>(all[0]?.ordinal ?? null)
+  // Where the reader is, in the URL so a link or a reload lands there: a
+  // finding, and the step of its reproduction chain that is open, as
+  // `?step=3` or `?step=3.impact` (`use`, `expected`, a code step's number,
+  // `impact`). Pressing a step or a finding in the index writes it.
+  const at = /^(\d+)(?:\.([a-z0-9]+))?$/.exec(params.get('step') ?? '')
+  const atOrdinal = at ? Number(at[1]) : null
+  const atKey = at?.[2]
+  const setAt = (ordinal: number, key?: string) => {
+    const p = new URLSearchParams(params)
+    p.set('step', key ? `${ordinal}.${key}` : String(ordinal))
+    setParams(p, { replace: true, preventScrollReset: true })
+  }
+  const landed = useRef(false)
+  useEffect(() => {
+    if (landed.current || atOrdinal === null) return
+    landed.current = true
+    const el = document.getElementById(atKey ? `f-${atOrdinal}-steps` : `f-${atOrdinal}`) ?? document.getElementById(`f-${atOrdinal}`)
+    if (!el) return
+    el.scrollIntoView({ block: 'start' })
+    setActive(atOrdinal)
+  }, [atOrdinal, atKey])
   // The finding whose exhaustion items are open under its header.
   const [exhausted, setExhausted] = useState<number | null>(null)
   // Findings whose whole correction history is open; the rest show the latest.
@@ -436,12 +459,16 @@ export function ReportBody({ report, onStatus, onSeverity, surfaceHref }: { repo
                           )}
                         </FactGroup>
                       )}
-                      {f.exploitable_by && (
+                      {f.exploitable_by && f.exploitable_by.length > 0 && (
                         <FactGroup label="exploitable" dense>
                           <FactRow kind="by" dense>
-                            <StateBadge state={exploitableState[f.exploitable_by]} className="h-5 px-1.5 text-[10.5px]">
-                              {words.exploitable[f.exploitable_by] ?? f.exploitable_by.replace(/_/g, ' ')}
-                            </StateBadge>
+                            <span className="flex flex-wrap items-center gap-1">
+                              {f.exploitable_by.map((e) => (
+                                <StateBadge key={e} state={exploitableState[e]} className="h-5 px-1.5 text-[10.5px]">
+                                  {words.exploitable[e] ?? e.replace(/_/g, ' ')}
+                                </StateBadge>
+                              ))}
+                            </span>
                           </FactRow>
                         </FactGroup>
                       )}
@@ -513,7 +540,15 @@ export function ReportBody({ report, onStatus, onSeverity, surfaceHref }: { repo
                     the API (dev proxy included); owner-or-admin by audit id,
                     public by the published slug. */}
                 {(f.snippet || (f.sites ?? []).length > 0 || f.normal_use || f.expected || f.impact || (f.visuals ?? []).length > 0) && (
-                  <FindingCode finding={f} visualSrc={visualSrcFor(report)} pin={{ repo: report.document.report.pin.repo, commit: report.document.report.pin.commit }} links={links} />
+                  <FindingCode
+                    id={`f-${f.ordinal}-steps`}
+                    finding={f}
+                    visualSrc={visualSrcFor(report)}
+                    pin={{ repo: report.document.report.pin.repo, commit: report.document.report.pin.commit }}
+                    links={links}
+                    open={atOrdinal === f.ordinal ? atKey : undefined}
+                    onOpen={(key) => setAt(f.ordinal, key)}
+                  />
                 )}
                 {f.exploit_path && (
                   <div className="flex flex-col gap-1.5">
@@ -595,6 +630,7 @@ export function ReportBody({ report, onStatus, onSeverity, surfaceHref }: { repo
                   onClick={(e) => {
                     e.preventDefault()
                     setActive(f.ordinal)
+                    setAt(f.ordinal)
                     const el = document.getElementById(`f-${f.ordinal}`)
                     el?.scrollIntoView({ block: 'start' })
                     el?.focus({ preventScroll: true })

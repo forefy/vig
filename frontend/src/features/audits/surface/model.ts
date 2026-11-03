@@ -91,6 +91,7 @@ export function keysSeen(uses: AccountUse[]): KeySeen[] {
 export type Words = {
   evm: boolean
   web: boolean
+  repo: boolean
   height: string
   signers: string
   ixs: string
@@ -193,24 +194,33 @@ const chainStages: Words['stages'] = ['enters', 'loads', 'validates', 'runs', 'c
 export function wordsOf(surface: Surface, byId: Map<string, Node>): Words {
   if (surface.adapter === 'webapp') {
     // A request's ref is "METHOD url": the link is the url itself.
-    return { evm: false, web: true, height: '', signers: 'clients', ixs: 'routes', program: 'host', programs: 'hosts', units: 'ms', calls: 'nav', txs: 'requests', accounts: 'parameters', boxPrefix: 'host:', stages: ['from', 'takes', 'in', 'handles', 'navigates to', 'done'], txHref: (ref) => ref.slice(ref.indexOf(' ') + 1) }
+    return { evm: false, web: true, repo: false, height: '', signers: 'clients', ixs: 'routes', program: 'host', programs: 'hosts', units: 'ms', calls: 'nav', txs: 'requests', accounts: 'parameters', boxPrefix: 'host:', stages: ['from', 'takes', 'in', 'handles', 'navigates to', 'done'], txHref: (ref) => ref.slice(ref.indexOf(' ') + 1) }
+  }
+  if (surface.adapter === 'repo') {
+    // A repository's map is read off its index: packages hold handlers,
+    // and a handler's sinks hang under it. Nothing here was observed.
+    return { evm: false, web: false, repo: true, height: '', signers: 'callers', ixs: 'functions', program: 'package', programs: 'packages', units: '', calls: 'calls', txs: 'calls', accounts: 'sinks', boxPrefix: 'p:', stages: ['enters', 'loads', 'validates', 'runs', 'calls', 'commits'], txHref: () => '' }
   }
   if (surface.adapter === 'ethereum') {
     const explorerOf = (pid?: string) => str(byId.get(`p:${pid ?? ''}`)?.facts?.explorer) || str([...byId.values()].find((n) => n.kind === 'program')?.facts?.explorer) || 'https://etherscan.io'
-    return { evm: true, web: false, height: 'block', signers: 'senders', ixs: 'functions', program: 'contract', programs: 'contracts', units: 'gas', calls: 'calls out', txs: 'transactions', accounts: 'accounts', boxPrefix: 'p:', stages: chainStages, txHref: (sig, pid) => `${explorerOf(pid)}/tx/${sig}` }
+    return { evm: true, web: false, repo: false, height: 'block', signers: 'senders', ixs: 'functions', program: 'contract', programs: 'contracts', units: 'gas', calls: 'calls out', txs: 'transactions', accounts: 'accounts', boxPrefix: 'p:', stages: chainStages, txHref: (sig, pid) => `${explorerOf(pid)}/tx/${sig}` }
   }
-  return { evm: false, web: false, height: 'slot', signers: 'signers', ixs: 'instructions', program: 'program', programs: 'programs', units: 'cu', calls: 'cpi', txs: 'transactions', accounts: 'accounts', boxPrefix: 'p:', stages: chainStages, txHref: (sig) => `https://explorer.solana.com/tx/${sig}` }
+  return { evm: false, web: false, repo: false, height: 'slot', signers: 'signers', ixs: 'instructions', program: 'program', programs: 'programs', units: 'cu', calls: 'cpi', txs: 'transactions', accounts: 'accounts', boxPrefix: 'p:', stages: chainStages, txHref: (sig) => `https://explorer.solana.com/tx/${sig}` }
 }
 
 export function buildModel(surface: Surface, evidence: Evidence[], programs: Program[]): Model {
   const nodes = surface.nodes ?? []
   const byId = new Map(nodes.map((n) => [n.id, n]))
   const words = wordsOf(surface, byId)
-  // On the web the boxes are the hosts on the map; the audit holds no
-  // deployment record for them, so each gets a bare identity.
+  // On the web the boxes are the hosts on the map, in a repository its
+  // packages; the audit holds no deployment record for them, so each
+  // gets a bare identity.
+  const bare = (id: string) => ({ id, match: 'unverified', idl_present: false, ownership_proven: false, bytecode_changed: false }) as Program
   const infos: Program[] = words.web
-    ? nodes.filter((n) => n.kind === 'host' && !n.external).map((n) => ({ id: n.facts?.host ?? n.name, match: 'unverified', idl_present: false, ownership_proven: false, bytecode_changed: false }) as Program)
-    : programs
+    ? nodes.filter((n) => n.kind === 'host' && !n.external).map((n) => bare(n.facts?.host ?? n.name))
+    : words.repo
+      ? nodes.filter((n) => n.kind === 'program' && !n.external).map((n) => bare(n.id.slice(2)))
+      : programs
   const audited = new Set(infos.map((p) => p.id))
 
   const ixs = new Map<string, Ix>()

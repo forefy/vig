@@ -86,7 +86,11 @@ export function AdminAuditDetail({ view = 'timeline' }: { view?: 'timeline' | 's
             ) : (
               <Stat label={a.state} value={relTime(a.updated_at, now)} tone={a.state === 'delivered' ? 'ok' : 'bad'} />
             )}
-            <Stat label="scope" value={a.scope.lines.toLocaleString('en-US')} hint={`code lines · ${(a.scope.files ?? []).length} files`} />
+            {a.scope.lines ? (
+              <Stat label="scope" value={a.scope.lines.toLocaleString('en-US')} hint={`code lines · ${(a.scope.files ?? []).length} files`} />
+            ) : (
+              <Stat label="scope" value={(a.scope.files ?? []).length.toLocaleString('en-US')} hint="paths" />
+            )}
             <Stat label="cost" value={a.cost_kind === 'credit' ? '1 credit' : 'daily slot'} />
             <Stat label="queued" value={relTime(a.created_at, now)} />
           </div>

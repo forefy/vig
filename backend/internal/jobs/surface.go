@@ -24,6 +24,19 @@ type SurfaceMapper struct {
 	// Inspectors re-read each program against the checkout once it is
 	// here, so the panel written at intake carries what the source says.
 	Inspectors map[string]core.ProgramInspector
+	// IndexDir names where an audit's sealed index parts live; a builder
+	// that maps from the index (a plain repository) reads them there.
+	IndexDir func(auditID string) string
+}
+
+// Remap drops an audit's map and builds it again, for when what the audit
+// has changed: an index arrived.
+func (m *SurfaceMapper) Remap(ctx context.Context, a store.Audit) error {
+	if err := m.Store.ResetSurface(ctx, a.ID); err != nil {
+		return err
+	}
+	m.Once(ctx, a)
+	return nil
 }
 
 // Loop runs until ctx ends.
@@ -72,7 +85,12 @@ func (m *SurfaceMapper) Once(ctx context.Context, a store.Audit) {
 	bctx, cancel := context.WithTimeout(ctx, budget.Deadline)
 	defer cancel()
 	started := time.Now()
-	in := core.SurfaceInput{Subjects: a.ProgramIDs, Chains: map[string]string{}, Budget: budget}
+	in := core.SurfaceInput{Subjects: a.ProgramIDs, Chains: map[string]string{}, Budget: budget, Repo: t.Repo}
+	if m.IndexDir != nil {
+		if _, err := m.Store.GetIndex(ctx, a.ID); err == nil {
+			in.Index = m.IndexDir(a.ID)
+		}
+	}
 	programs, err := m.Store.ListPrograms(ctx, a.TargetID)
 	if err == nil {
 		for _, p := range programs {

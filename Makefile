@@ -54,6 +54,70 @@ migrate-down: $(ENV_BACKEND) ## Roll back the last migration
 seed: $(ENV_BACKEND) ## Write the development dataset (idempotent, refuses in prod)
 	@set -a; source $(ENV_BACKEND); set +a; cd backend && go run ./cmd/vig seed
 
+# ---- demo index ----
+
+# The demo's Atlas indexes come from real code: every seeded audit gets an
+# index built by vig-op's own indexer from its repository at the pinned
+# commit, and the Mattermost plugin audit gets the whole engagement, the
+# twelve plugin repositories the public Bugcrowd scope lists. Needs git and
+# a cgo build of vig-op (the default on a workstation). A clone that is
+# already at its commit is not fetched again. The clones hold Go packages,
+# so backend/data carries a go.mod of its own that keeps `go test ./...`
+# out of them.
+DEMO_INDEX_ROOT ?= backend/data/demo
+# The engagement: one target over twelve repositories, catalogued against
+# the plugin-github audit.
+DEMO_ENGAGEMENT_REPO ?= mattermost/mattermost-plugin-github
+DEMO_ENGAGEMENT_REPOS := \
+	mattermost/mattermost-plugin-jira=074eb689cb505475b46c7243a335b93e78a24b1d \
+	mattermost/mattermost-plugin-zoom=828ca56b3b1ebf4790f797d31c43b4b10b2749a3 \
+	mattermost/mattermost-plugin-github=2b9840ce473dfeb222ee69038f31f5d0b428e8ae \
+	mattermost/mattermost-plugin-gitlab=8916a039f1ba0f27bd550c17adb8507018f95074 \
+	mattermost/mattermost-plugin-calls=b3cc0387ff8f54a927db3e766ae63eb42dba88ba \
+	mattermost/mattermost-plugin-playbooks=e2ad0b6892c29001a03dda9f35bbe9a8363105b4 \
+	mattermost/mattermost-plugin-boards=136c219e42996a935c2c14cf21fa7284d26dbb62 \
+	mattermost/mattermost-plugin-ai=ecbc93994b59bbd3aee780c5194783b52dec78a5 \
+	mattermost/mattermost-plugin-mscalendar=c79b1c661b292fcc91bc339e1b30343ede34b767 \
+	mattermost/mattermost-plugin-msteams-meetings=1b1b8717d505b2c6436cb93b30cdd9aeef9211d0 \
+	mattermost/mattermost-plugin-confluence=ea159ad5e5c8c4762c4963061d2ac16dadbeb267 \
+	mattermost/mattermost-plugin-msteams=d9ad4dd7030b052bf0fecce0e15a78cd08621975
+# The other seeded audits (seed.engagements), each its own single-repository build.
+# Sites the demo captures with a headless browser (frontend/scripts/har.mjs)
+# and indexes from the capture alone, against the site audit the seed queues.
+DEMO_SITES := https://openrouter.ai
+
+DEMO_AUDIT_REPOS := \
+	freedomofpress/securedrop=9f86aedc9b7005ec99042242df157c4b31ac5155 \
+	mattermost/mattermost-plugin-calls=b3cc0387ff8f54a927db3e766ae63eb42dba88ba \
+	auth0/auth0-spa-js=0ea366c6e9e82e7cdc58af5b12efa29bad6f8837 \
+	mattermost/mattermost-plugin-jira=074eb689cb505475b46c7243a335b93e78a24b1d \
+	trustwallet/wallet-core=2a8aa02011ec42b43689667682fa99ae905418d5 \
+	fireblocks/mpc-lib=00ae08b7f1bdbb887aedece384aca2f942aae432 \
+	ClickHouse/ClickHouse=43e51854bef9371780c185401efdfe5904b559bc
+
+# fetch-at: clone a repository at one commit under the demo root, once.
+define fetch-at
+	repo=$${entry%%=*}; sha=$${entry##*=}; dir=$(DEMO_INDEX_ROOT)/src/$$repo; \
+	if [ ! -d $$dir/.git ]; then mkdir -p $$dir && git -C $$dir init -q && git -C $$dir remote add origin https://github.com/$$repo.git; fi; \
+	if [ "$$(git -C $$dir rev-parse HEAD 2>/dev/null)" != "$$sha" ]; then echo "fetching $$repo @ $${sha%????????????????????????????????}"; git -C $$dir fetch -q --depth 1 origin $$sha && git -C $$dir checkout -q --detach $$sha; fi
+endef
+
+demo-index: $(ENV_BACKEND) ## Build the demo Atlas indexes from the real repositories with vig-op and catalogue them
+	@mkdir -p backend/data && test -f backend/data/go.mod || printf 'module demo\n\ngo 1.26\n' > backend/data/go.mod
+	@for entry in $(DEMO_ENGAGEMENT_REPOS) $(DEMO_AUDIT_REPOS); do $(fetch-at); done
+	@cd backend && VIG_OP_CONTAINER=1 VIG_OP_HOME=$$(mktemp -d) go run ./cmd/vig-op index build --target mattermost --out ../$(DEMO_INDEX_ROOT) \
+		$$(for entry in $(DEMO_ENGAGEMENT_REPOS); do repo=$${entry%%=*}; printf -- '--repo %s=../%s/src/%s ' $$repo $(DEMO_INDEX_ROOT) $$repo; done)
+	@set -a; source $(ENV_BACKEND); set +a; cd backend && go run ./cmd/vig index import --repo $(DEMO_ENGAGEMENT_REPO) --root ../$(DEMO_INDEX_ROOT) --target mattermost --tool-version dev
+	@for entry in $(DEMO_AUDIT_REPOS); do repo=$${entry%%=*}; slug=$$(echo $$repo | tr '/' '-' | tr 'A-Z' 'a-z'); \
+		(cd backend && VIG_OP_CONTAINER=1 VIG_OP_HOME=$$(mktemp -d) go run ./cmd/vig-op index build --target $$slug --out ../$(DEMO_INDEX_ROOT) --repo $$repo=../$(DEMO_INDEX_ROOT)/src/$$repo) && \
+		(set -a; source $(ENV_BACKEND); set +a; cd backend && go run ./cmd/vig index import --repo $$repo --root ../$(DEMO_INDEX_ROOT) --target $$slug --tool-version dev); \
+	done
+	@for site in $(DEMO_SITES); do host=$${site#*://}; slug=$$(echo $$host | tr '.' '-'); har=$(DEMO_INDEX_ROOT)/har/$$slug/session-1.har; \
+		test -f $$har || (cd frontend && node scripts/har.mjs $$site ../$$har) && \
+		(cd backend && VIG_OP_CONTAINER=1 VIG_OP_HOME=$$(mktemp -d) go run ./cmd/vig-op index build --target $$slug --out ../$(DEMO_INDEX_ROOT) --har ../$$har) && \
+		(set -a; source $(ENV_BACKEND); set +a; cd backend && go run ./cmd/vig index import --repo $$site --root ../$(DEMO_INDEX_ROOT) --target $$slug --tool-version dev); \
+	done
+
 # ---- dev loop ----
 
 # The live chain watch is off for a dev process (VIG_WATCH=0): a local

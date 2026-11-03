@@ -50,8 +50,8 @@ func TestIndexPartsAndManifest(t *testing.T) {
 		}
 	}
 
-	m := indexManifest(parts, "zz", "0.3.1")
-	if m.Tool != "zz" || m.ToolVersion != "0.3.1" || len(m.Tables) != 2 {
+	m := indexManifest(parts, "vig", "0.3.1")
+	if m.Tool != "vig" || m.ToolVersion != "0.3.1" || len(m.Tables) != 2 {
 		t.Fatalf("manifest: %+v", m)
 	}
 	if m.Tables[0].Name != "calls" || len(m.Tables[0].Parts) != 2 || m.Tables[0].Bytes != int64(len(calls1)+len(calls2)) || m.Tables[0].Rows != 0 {
@@ -73,16 +73,5 @@ func TestIndexPartsAndManifest(t *testing.T) {
 		if err != nil || len(parts) != 0 {
 			t.Errorf("%v: %d parts, %v", c, len(parts), err)
 		}
-	}
-}
-
-func TestDefaultZZRoot(t *testing.T) {
-	t.Setenv("ZZ_ROOT", "/data/zz")
-	if defaultZZRoot() != "/data/zz" {
-		t.Fatal("ZZ_ROOT ignored")
-	}
-	t.Setenv("ZZ_ROOT", "")
-	if got := defaultZZRoot(); filepath.Base(got) != "zz" {
-		t.Fatalf("default root %q", got)
 	}
 }

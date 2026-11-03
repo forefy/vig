@@ -42,9 +42,12 @@ const usage = `vig-op - operator CLI (runs only inside the audit sandbox)
   vig-op whatif [--set-account k=json] [--time 36h] [--arg name=value] <sig>
                                      replay with the world changed first (overrides need a surfnet on VIG_RPC)
   vig-op har [--host h] <file.har>   map routes and requests from a browser or proxy capture
-  vig-op index push [--root DIR] [--target SLUG] [--tool-version V]
-                                     stage every Parquet part zz built for the target
-                                     (<root>/index/<table>/target=<slug>/*.parquet) and seal them as the job's index
+  vig-op index build [--har FILE]... [--names FILE] [--resources FILE] [--push]
+                                     build the job's index from its checkout and captures: functions, calls,
+                                     flows, routes, literals; requests and bodies; names and resources; the edges
+  vig-op index push [--root DIR] [--target SLUG]
+                                     stage every Parquet part under <root>/index/<table>/target=<slug>/
+                                     and seal them as the job's index
 
 Environment
   VIG_API        API base, default http://localhost:7112
@@ -52,7 +55,6 @@ Environment
   VIG_OP_HOME    working directory, default /work
   VIG_OP_CONTAINER=1 asserts the sandbox when auto-detection fails
   VIG_RPC        Solana RPC for replay, default the public mainnet endpoint
-  ZZ_ROOT        zz checkout or data dir for index push, default ~/zz
 `
 
 func main() {

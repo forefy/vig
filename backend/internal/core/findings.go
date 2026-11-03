@@ -4,6 +4,8 @@
 package core
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"regexp"
@@ -47,6 +49,8 @@ const (
 	ExploitableAnyone           ExploitableBy = "anyone"            // no privileges at all
 	ExploitableAnyUser          ExploitableBy = "any_user"          // any authenticated user of the site, nothing more
 	ExploitableInternal         ExploitableBy = "internal"          // requires insider standing: repo, cluster or telemetry access - never a customer
+	ExploitableContributor      ExploitableBy = "contributor"       // whoever can land code in the repository: a maintainer, or a pull request that gets merged
+	ExploitablePipeline         ExploitableBy = "pipeline"          // whoever runs or changes the build: a CI workflow, an action it pulls in, a build secret
 	ExploitableAnySigner        ExploitableBy = "any_signer"        // a funded account that can sign, nothing more
 	ExploitableAccountOwner     ExploitableBy = "account_owner"     // must control a particular account or position
 	ExploitableAdmin            ExploitableBy = "admin"             // a privileged role inside the program
@@ -57,7 +61,11 @@ const (
 	ExploitableNone             ExploitableBy = "none"              // not reachable with the current instruction set
 )
 
-var exploitableBy = []ExploitableBy{ExploitableAnyone, ExploitableAnyUser, ExploitableInternal, ExploitableAnySigner, ExploitableAccountOwner, ExploitableAdmin, ExploitableUpgradeAuthority, ExploitableOtherProgram, ExploitableInternalNetwork, ExploitableAPIKey, ExploitableNone}
+var exploitableBy = []ExploitableBy{ExploitableAnyone, ExploitableAnyUser, ExploitableInternal, ExploitableContributor, ExploitablePipeline, ExploitableAnySigner, ExploitableAccountOwner, ExploitableAdmin, ExploitableUpgradeAuthority, ExploitableOtherProgram, ExploitableInternalNetwork, ExploitableAPIKey, ExploitableNone}
+
+// exploitableLadder is the order a finding's actors are kept in, least
+// privileged first, the way a reader weighs them.
+var exploitableLadder = []ExploitableBy{ExploitableAnyone, ExploitableAnyUser, ExploitableAnySigner, ExploitableAccountOwner, ExploitableAPIKey, ExploitableInternalNetwork, ExploitableContributor, ExploitablePipeline, ExploitableInternal, ExploitableAdmin, ExploitableUpgradeAuthority, ExploitableOtherProgram, ExploitableNone}
 
 func validExploitableBy(e ExploitableBy) bool {
 	for _, v := range exploitableBy {
@@ -66,6 +74,73 @@ func validExploitableBy(e ExploitableBy) bool {
 		}
 	}
 	return false
+}
+
+func rankOf(e ExploitableBy) int {
+	for i, v := range exploitableLadder {
+		if v == e {
+			return i
+		}
+	}
+	return len(exploitableLadder)
+}
+
+// Exploiters is everyone who can reach a finding: one actor or several
+// (any signed-in user, and also whoever holds an integration's key). A
+// document written when a finding named one actor carries a single string,
+// which reads as a list of one.
+type Exploiters []ExploitableBy
+
+func (e *Exploiters) UnmarshalJSON(b []byte) error {
+	t := bytes.TrimSpace(b)
+	if bytes.Equal(t, []byte("null")) {
+		*e = nil
+		return nil
+	}
+	if len(t) > 0 && t[0] == '"' {
+		var one ExploitableBy
+		if err := json.Unmarshal(t, &one); err != nil {
+			return err
+		}
+		if one == "" {
+			*e = nil
+		} else {
+			*e = Exploiters{one}
+		}
+		return nil
+	}
+	var many []ExploitableBy
+	if err := json.Unmarshal(t, &many); err != nil {
+		return err
+	}
+	*e = many
+	return nil
+}
+
+// Least is the least privileged actor, the one that sets how exposed the
+// finding is, or "" for none named.
+func (e Exploiters) Least() ExploitableBy {
+	if len(e) == 0 {
+		return ""
+	}
+	return e[0]
+}
+
+// normal is the list kept: each actor once, on the ladder.
+func (e Exploiters) normal() Exploiters {
+	if len(e) == 0 {
+		return nil
+	}
+	seen := map[ExploitableBy]bool{}
+	out := make(Exploiters, 0, len(e))
+	for _, v := range e {
+		if !seen[v] {
+			seen[v] = true
+			out = append(out, v)
+		}
+	}
+	sort.SliceStable(out, func(i, j int) bool { return rankOf(out[i]) < rankOf(out[j]) })
+	return out
 }
 
 // MatchStatus says how the reviewed source relates to the deployed bytecode.
@@ -301,7 +376,7 @@ type Finding struct {
 	Title               string           `json:"title" minLength:"3" maxLength:"140" doc:"Required."`
 	Location            Location         `json:"location" doc:"Required."`
 	Description         string           `json:"description" minLength:"1" doc:"Required. Plain text for a reader in a hurry: blank lines separate short paragraphs, lines starting with '- ' are bullets, backticks mark code, files, functions and errors, [[Title of another finding]] links to it. No paragraph over 600 characters; three or four blocks at most"`
-	ExploitableBy       ExploitableBy    `json:"exploitable_by,omitempty" enum:"anyone,any_user,internal,any_signer,account_owner,admin,upgrade_authority,other_program,internal_network,api_key,none" doc:"Recommended. The privilege an attacker needs to reach this finding, from least to most: anyone (no account, no session), any_user (any signed-in account) or any_signer (any funded key), account_owner (a member of the affected account or position), api_key (an integration's credentials), internal_network (inside the network or a VPN), admin (a privileged role), upgrade_authority (the platform operator or upgrade key), other_program (only through another program or service), internal (insider standing on the code or the telemetry: repo, snapshot or store access, never a customer), none. Shown to every reader"`
+	ExploitableBy       Exploiters       `json:"exploitable_by,omitempty" enum:"anyone,any_user,internal,contributor,pipeline,any_signer,account_owner,admin,upgrade_authority,other_program,internal_network,api_key,none" doc:"Recommended. Everyone who can reach this finding, one actor or several, each by the privilege an attacker needs, from least to most: anyone (no account, no session), any_user (any signed-in account) or any_signer (any funded key), account_owner (a member of the affected account or position), api_key (an integration's credentials), internal_network (inside the network or a VPN), contributor (whoever can land code in the repository), pipeline (whoever runs or changes the build: a CI workflow, an action, a build secret), internal (other insider standing on the code or the telemetry: snapshot or store access, never a customer), admin (a privileged role), upgrade_authority (the platform operator or upgrade key), other_program (only through another program or service); or none alone. Kept least privileged first. A single string reads as a list of one. Shown to every reader"`
 	ExploitPath         string           `json:"exploit_path,omitempty" doc:"Optional. Shown only to verified owners"`
 	ExploitPathWithheld bool             `json:"exploit_path_withheld,omitempty" doc:"An exploit path exists on this finding but is shown only to verified owners"`
 	Fix                 string           `json:"fix" minLength:"1" doc:"Required. A '- ' bullet per change. A code fence (three backticks on their own line, closed the same way) right after a bullet carries the definite fix: the correct code, the exact header value, the configuration line. A fence whose info line names a place, like rust src/lib.rs:41-45, is shown as a patch replacing those lines (path:line alone inserts before it)"`
@@ -607,8 +682,18 @@ func (d *FindingsDocument) Validate() error {
 		} else if !validFindingStatus(f.Status) {
 			errs = append(errs, fmt.Sprintf("findings[%d].status is invalid", i))
 		}
-		if f.ExploitableBy != "" && !validExploitableBy(f.ExploitableBy) {
-			errs = append(errs, fmt.Sprintf("findings[%d].exploitable_by %q is not one of %v", i, f.ExploitableBy, exploitableBy))
+		for _, e := range f.ExploitableBy {
+			if !validExploitableBy(e) {
+				errs = append(errs, fmt.Sprintf("findings[%d].exploitable_by %q is not one of %v", i, e, exploitableBy))
+			}
+		}
+		d.Findings[i].ExploitableBy = f.ExploitableBy.normal()
+		if len(d.Findings[i].ExploitableBy) > 1 {
+			for _, e := range d.Findings[i].ExploitableBy {
+				if e == ExploitableNone {
+					errs = append(errs, fmt.Sprintf("findings[%d].exploitable_by names none beside an actor; none stands alone", i))
+				}
+			}
 		}
 	}
 	for i, f := range d.Findings {
@@ -983,7 +1068,7 @@ func ExampleFinding() Finding {
 		NormalUse:     "How this code is ordinarily used: who calls it, with what, and what comes back. Shown first on the chain.",
 		Expected:      "What the code is supposed to guarantee here: the invariant the steps break. Shown after normal use.",
 		Impact:        "Who loses what when this happens. Shown last on the chain, with the finding's attachments.",
-		ExploitableBy: ExploitableAnyone, // anyone | any_user | any_signer | account_owner | api_key | internal_network | admin | upgrade_authority | other_program | none
+		ExploitableBy: Exploiters{ExploitableAnyone}, // one or more of anyone | any_user | any_signer | account_owner | api_key | internal_network | contributor | pipeline | internal | admin | upgrade_authority | other_program, or none alone
 		ExploitPath:   "",
 		Fix:           "- one bullet per change; name where its code goes and it renders as a patch\n```rust programs/<name>/src/lib.rs:1-1\n// the correct code for those lines\n```\n\n- a bullet with no definite code stands alone",
 		References:    []string{},
@@ -1034,7 +1119,7 @@ func (d *FindingsDocument) Advise() []string {
 				}
 			}
 		}
-		if f.ExploitableBy == "" {
+		if len(f.ExploitableBy) == 0 {
 			say(f, "no exploitable_by; the reader cannot tell who can reach it")
 		}
 		if f.Evidence == nil {

@@ -9,6 +9,8 @@ package main
 
 import (
 	"context"
+	"errors"
+	"flag"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -41,7 +43,7 @@ import (
 	"github.com/forefy/vig/backend/internal/store"
 )
 
-const usage = `usage: vig [openapi | migrate up|down|status | db | seed | evm-spike <address> [blocks]]`
+const usage = `usage: vig [openapi | migrate up|down|status | db | seed | index import | evm-spike <address> [blocks]]`
 
 func main() {
 	setupLogging(env("LOG_FORMAT", "text"))
@@ -63,6 +65,8 @@ func main() {
 			runDB()
 		case "seed":
 			runSeed()
+		case "index":
+			runIndex(os.Args[2:])
 		case "evm-spike":
 			runEVMSpike(os.Args[2:])
 		default:
@@ -107,7 +111,9 @@ func serve() {
 				inspectors[key] = insp
 			}
 		}
-		go (&jobs.SurfaceMapper{Store: st, GitHub: d.GitHub, Builders: map[string]core.SurfaceBuilder{solana.Key: builder, ethereum.Key: eth}, Inspectors: inspectors}).Loop(ctx)
+		mapper := &jobs.SurfaceMapper{Store: st, GitHub: d.GitHub, Builders: map[string]core.SurfaceBuilder{solana.Key: builder, ethereum.Key: eth, repo.Key: d.Adapters[repo.Key].(*repo.Adapter)}, Inspectors: inspectors, IndexDir: indexDir(cfg)}
+		d.Mapper = mapper
+		go mapper.Loop(ctx)
 		// The live watch opens a chain session per watchable audit the
 		// moment the process is up; VIG_WATCH=0 keeps a dev process off
 		// the network until something asks for it.
@@ -280,4 +286,157 @@ func runEVMSpike(args []string) {
 		fatal(err)
 	}
 	fmt.Print(r.Text())
+}
+
+// runIndexImport catalogues an index a tool built on this machine against
+// an audit, the way a seal does for an operator's upload: every Parquet
+// part under <root>/index/<table>/target=<slug>/ is copied under
+// DATA_DIR/index/<audit>/<table>/ and the manifest recorded, replacing an
+// earlier index. The audit is named by id, or as the newest on a repository.
+func runIndex(args []string) {
+	const use = "usage: vig index (import | map) (--audit ID | --repo owner/name) ..."
+	if len(args) < 1 {
+		fatal(errors.New(use))
+	}
+	switch args[0] {
+	case "import":
+		runIndexImport(args)
+	case "map":
+		runIndexMap(args)
+	default:
+		fatal(errors.New(use))
+	}
+}
+
+// indexAudit opens the store and finds the audit an index command names.
+func indexAudit(auditID, byRepo string) (config.Config, *store.Store, store.Audit) {
+	cfg, err := config.FromEnv()
+	if err != nil {
+		fatal(err)
+	}
+	ctx := context.Background()
+	st, err := store.New(ctx, cfg.DatabaseURL)
+	if err != nil {
+		fatal(err)
+	}
+	var a store.Audit
+	if auditID != "" {
+		a, err = st.GetAudit(ctx, auditID)
+	} else {
+		a, err = st.LatestAuditByRepo(ctx, byRepo)
+	}
+	if err != nil {
+		st.Close()
+		fatal(fmt.Errorf("audit: %w", err))
+	}
+	return cfg, st, a
+}
+
+// `vig index map` builds an audit's map again from the index it has, for a
+// database whose server runs with its workers off.
+func runIndexMap(args []string) {
+	const use = "usage: vig index map (--audit ID | --repo owner/name)"
+	fs := flag.NewFlagSet("index map", flag.ContinueOnError)
+	auditID := fs.String("audit", "", "the audit's id")
+	byRepo := fs.String("repo", "", "owner/name: the newest audit on this repository")
+	if err := fs.Parse(args[1:]); err != nil {
+		fatal(err)
+	}
+	if (*auditID == "") == (*byRepo == "") {
+		fatal(errors.New(use))
+	}
+	cfg, st, a := indexAudit(*auditID, *byRepo)
+	defer st.Close()
+	ctx := context.Background()
+	if _, err := st.GetIndex(ctx, a.ID); err != nil {
+		fatal(fmt.Errorf("index: %w", err))
+	}
+	mapper := &jobs.SurfaceMapper{Store: st, Builders: map[string]core.SurfaceBuilder{repo.Key: repo.New()}, IndexDir: indexDir(cfg)}
+	if err := mapper.Remap(ctx, a); err != nil {
+		fatal(err)
+	}
+	doc, err := st.GetSurface(ctx, a.ID)
+	if err != nil {
+		fatal(err)
+	}
+	fmt.Printf("mapped   %s  %s  %d nodes  %d edges\n", a.ID, a.Repo, len(doc.Nodes), len(doc.Edges))
+}
+
+func runIndexImport(args []string) {
+	const use = "usage: vig index import (--audit ID | --repo owner/name) [--root DIR] [--target SLUG] [--tool NAME] [--tool-version V]"
+	fs := flag.NewFlagSet("index import", flag.ContinueOnError)
+	auditID := fs.String("audit", "", "the audit's id")
+	byRepo := fs.String("repo", "", "owner/name: the newest audit on this repository")
+	root := fs.String("root", "", "a build root holding index/<table>/target=<slug>/*.parquet (default $VIG_INDEX_ROOT, else data/demo)")
+	target := fs.String("target", "", "the target slug the parts were built for (default: the audit id)")
+	tool := fs.String("tool", "vig", "the tool to record")
+	toolVersion := fs.String("tool-version", "", "the tool's version to record")
+	if err := fs.Parse(args[1:]); err != nil {
+		fatal(err)
+	}
+	if (*auditID == "") == (*byRepo == "") {
+		fatal(errors.New(use))
+	}
+	if *root == "" {
+		*root = os.Getenv("VIG_INDEX_ROOT")
+		if *root == "" {
+			*root = filepath.Join("data", "demo")
+		}
+	}
+	cfg, st, a := indexAudit(*auditID, *byRepo)
+	defer st.Close()
+	ctx := context.Background()
+	slug := *target
+	if slug == "" {
+		slug = a.ID
+	}
+	parts, err := core.IndexParts(*root, slug, func(note string) { fmt.Fprintln(os.Stderr, "vig: "+note) })
+	if err != nil {
+		fatal(err)
+	}
+	if len(parts) == 0 {
+		fatal(fmt.Errorf("no parts under %s/index/<table>/target=%s/", *root, slug))
+	}
+	m := core.ManifestOf(parts, *tool, *toolVersion)
+	if err := m.Validate(); err != nil {
+		fatal(err)
+	}
+	dir := indexDir(cfg)(a.ID)
+	if err := os.RemoveAll(dir); err != nil {
+		fatal(err)
+	}
+	for _, p := range parts {
+		if err := os.MkdirAll(filepath.Join(dir, p.Table), 0o755); err != nil {
+			fatal(err)
+		}
+		raw, err := os.ReadFile(p.Path)
+		if err != nil {
+			fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, p.Table, p.File), raw, 0o644); err != nil {
+			fatal(err)
+		}
+	}
+	ix, err := st.SaveIndex(ctx, store.AuditIndex{AuditID: a.ID, Tool: m.Tool, ToolVersion: m.ToolVersion, Bytes: m.TotalBytes(), Tables: m.Tables})
+	if err != nil {
+		fatal(err)
+	}
+	fmt.Printf("indexed  %s  %s  %d tables  %d parts  %d bytes\n", a.ID, a.Repo, len(ix.Tables), len(parts), ix.Bytes)
+	for _, t := range ix.Tables {
+		fmt.Printf("  %-18s %3d parts  %12d bytes\n", t.Name, len(t.Parts), t.Bytes)
+	}
+	// The map of a repository is read off its index; build it here, so a
+	// server with its workers off still shows it.
+	mapper := &jobs.SurfaceMapper{Store: st, Builders: map[string]core.SurfaceBuilder{repo.Key: repo.New()}, IndexDir: indexDir(cfg)}
+	if err := mapper.Remap(ctx, a); err != nil {
+		fatal(err)
+	}
+	if doc, err := st.GetSurface(ctx, a.ID); err == nil {
+		fmt.Printf("mapped   %d nodes  %d edges\n", len(doc.Nodes), len(doc.Edges))
+	}
+}
+
+// indexDir is where an audit's sealed index parts live.
+func indexDir(cfg config.Config) func(string) string {
+	return func(auditID string) string { return filepath.Join(cfg.DataDir, "index", auditID) }
 }

@@ -48,7 +48,7 @@ Findings arrive from anywhere, and from the agentic context you send them to vig
   </tr>
 </table>
 
-Everything above is the seeded demo (`make seed`): invented targets with invented findings. The film is the web audit at `/r/ledgerly-invoice-idor`; the report shot and the grid are the Solana audit at `/r/vault-signer-check`.
+The seed (`make seed`) writes users, credits and audits on repositories the public Bugcrowd scopes list, pinned to real commits, and not one finding: a report comes from an audit that ran. The shots above are from delivered audits.
 
 - [Determinism](#determinism)
 - [The dashboard](#the-dashboard)
@@ -106,7 +106,8 @@ Needs Go 1.23+, Node 22.23.4+ and Docker (Postgres via compose).
 make setup          # tooling
 make db-up          # Postgres on :7132
 make migrate        # schema
-make seed           # demo users, targets and reports
+make seed           # dev users, credits, audits on real repositories
+make demo-index     # vig-op reads the Mattermost plugin repositories into the demo Atlas index
 make dev            # backend on :7112, frontend on :7111
 ```
 

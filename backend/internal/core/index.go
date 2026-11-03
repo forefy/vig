@@ -1,8 +1,14 @@
 package core
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 )
 
@@ -102,4 +108,91 @@ func (m IndexManifest) TotalBytes() int64 {
 		}
 	}
 	return n
+}
+
+// IndexPartFile is one Parquet part a tool wrote, found under the
+// target's directory of a table.
+type IndexPartFile struct {
+	Table  string
+	File   string
+	Path   string
+	Bytes  int64
+	SHA256 string
+}
+
+// IndexParts walks <root>/index/<table>/target=<slug>/ for every table
+// directory and returns the Parquet parts found, sorted by table and file,
+// with their sizes and digests. A table or file name the server would
+// refuse is skipped with a note to skip rather than failing the whole run.
+func IndexParts(root, slug string, skip func(string)) ([]IndexPartFile, error) {
+	tables, err := os.ReadDir(filepath.Join(root, "index"))
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var out []IndexPartFile
+	for _, t := range tables {
+		if !t.IsDir() {
+			continue
+		}
+		if !ValidIndexTable(t.Name()) {
+			skip(fmt.Sprintf("skipping table %q: lowercase letters, digits and underscores", t.Name()))
+			continue
+		}
+		dir := filepath.Join(root, "index", t.Name(), "target="+slug)
+		files, err := os.ReadDir(dir)
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				continue
+			}
+			return nil, err
+		}
+		for _, f := range files {
+			if f.IsDir() || !strings.HasSuffix(f.Name(), ".parquet") {
+				continue
+			}
+			if !ValidIndexFile(f.Name()) {
+				skip(fmt.Sprintf("skipping %s/%s: a plain .parquet file name", t.Name(), f.Name()))
+				continue
+			}
+			path := filepath.Join(dir, f.Name())
+			raw, err := os.ReadFile(path)
+			if err != nil {
+				return nil, err
+			}
+			if len(raw) == 0 {
+				skip(fmt.Sprintf("skipping %s/%s: empty", t.Name(), f.Name()))
+				continue
+			}
+			sum := sha256.Sum256(raw)
+			out = append(out, IndexPartFile{Table: t.Name(), File: f.Name(), Path: path, Bytes: int64(len(raw)), SHA256: hex.EncodeToString(sum[:])})
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Table != out[j].Table {
+			return out[i].Table < out[j].Table
+		}
+		return out[i].File < out[j].File
+	})
+	return out, nil
+}
+
+// ManifestOf groups the parts by table, in order. Row counts stay 0: the
+// tool does not report them and the server sums bytes itself.
+func ManifestOf(parts []IndexPartFile, tool, version string) IndexManifest {
+	m := IndexManifest{Tool: tool, ToolVersion: version}
+	at := map[string]int{}
+	for _, p := range parts {
+		i, ok := at[p.Table]
+		if !ok {
+			i = len(m.Tables)
+			at[p.Table] = i
+			m.Tables = append(m.Tables, IndexTable{Name: p.Table})
+		}
+		m.Tables[i].Parts = append(m.Tables[i].Parts, IndexPart{File: p.File, Bytes: p.Bytes, SHA256: p.SHA256})
+		m.Tables[i].Bytes += p.Bytes
+	}
+	return m
 }

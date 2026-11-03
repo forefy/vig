@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -67,7 +68,8 @@ type IndexBuildPart struct {
 	URL    string `json:"url" doc:"Path on this API; sends the Parquet bytes and honours Range"`
 }
 
-// AtlasIndex is every index across the owner's audits.
+// AtlasIndex is every index across the user's audits, every user's for
+// an admin.
 type AtlasIndex struct {
 	Audits []IndexBuild `json:"audits"`
 }
@@ -97,7 +99,7 @@ type opIndexSealIn struct {
 }
 
 func (d *Deps) registerIndex(api huma.API) {
-	huma.Register(api, withAuth(op("getAtlasIndex", http.MethodGet, "/v1/atlas/index", "Every index across the user's audits, with where each Parquet part is", "audits"), userAuth), d.getAtlasIndex)
+	huma.Register(api, withAuth(op("getAtlasIndex", http.MethodGet, "/v1/atlas/index", "Every index across the user's audits (every user's for an admin), with where each Parquet part is", "audits"), userAuth), d.getAtlasIndex)
 	huma.Register(api, withAuth(op("getAuditIndex", http.MethodGet, "/v1/audits/{id}/index", "The audit's index", "audits"), userAuth), d.getAuditIndex)
 	huma.Register(api, withAuth(op("putJobIndexPart", http.MethodPut, "/v1/op/jobs/{id}/index/parts", "Stage one Parquet part of the job's index", "operator"), operatorAuth), d.putJobIndexPart)
 	huma.Register(api, withAuth(op("sealJobIndex", http.MethodPost, "/v1/op/jobs/{id}/index", "Seal the staged parts as the job's index, replacing any earlier one", "operator"), operatorAuth), d.sealJobIndex)
@@ -105,9 +107,12 @@ func (d *Deps) registerIndex(api huma.API) {
 }
 
 // MountIndex serves the Parquet parts to the owner and admins, with
-// ranges, outside huma so http.ServeContent can do the slicing.
+// ranges, outside huma so http.ServeContent can do the slicing. HEAD is
+// what DuckDB asks first: a part that answers it with its length is read
+// by Range, footer and row groups, instead of whole.
 func (d *Deps) MountIndex(r chi.Router) {
 	r.Get("/v1/audits/{id}/index/{table}/{file}", d.serveIndexPart)
+	r.Head("/v1/audits/{id}/index/{table}/{file}", d.serveIndexPart)
 }
 
 // ---------- paths ----------
@@ -122,8 +127,15 @@ func (d *Deps) indexStaging(auditID string) string {
 	return filepath.Join(d.indexDir(auditID), ".staging")
 }
 
-func indexPartURL(auditID, table, file string) string {
-	return "/v1/audits/" + auditID + "/index/" + table + "/" + file
+// indexPartURL names a part by its audit, table, file and content: the
+// query carries the digest, so a rebuilt part is a new URL and the browser
+// may keep the old one as long as it likes.
+func indexPartURL(auditID, table, file, sha string) string {
+	u := "/v1/audits/" + auditID + "/index/" + table + "/" + file
+	if len(sha) >= 16 {
+		u += "?v=" + sha[:16]
+	}
+	return u
 }
 
 // removeIndexFiles drops everything stored for an audit's index. Called
@@ -142,7 +154,7 @@ func (d *Deps) buildOf(a store.Audit, ix store.AuditIndex) IndexBuild {
 	for _, t := range ix.Tables {
 		bt := IndexBuildTable{Name: t.Name, Rows: t.Rows, Bytes: t.Bytes, Parts: []IndexBuildPart{}}
 		for _, p := range t.Parts {
-			bt.Parts = append(bt.Parts, IndexBuildPart{File: p.File, Bytes: p.Bytes, SHA256: p.SHA256, URL: indexPartURL(a.ID, t.Name, p.File)})
+			bt.Parts = append(bt.Parts, IndexBuildPart{File: p.File, Bytes: p.Bytes, SHA256: p.SHA256, URL: indexPartURL(a.ID, t.Name, p.File, p.SHA256)})
 		}
 		out.Tables = append(out.Tables, bt)
 	}
@@ -154,7 +166,12 @@ func (d *Deps) getAtlasIndex(ctx context.Context, _ *struct{}) (*body[AtlasIndex
 	if err != nil {
 		return nil, err
 	}
-	audits, rows, err := d.Store.ListIndexedAudits(ctx, u.ID)
+	// An admin reads every build, as the parts are served to one.
+	owner := u.ID
+	if u.Role == "admin" {
+		owner = ""
+	}
+	audits, rows, err := d.Store.ListIndexedAudits(ctx, owner)
 	if err != nil {
 		return nil, fail(err)
 	}
@@ -166,9 +183,16 @@ func (d *Deps) getAtlasIndex(ctx context.Context, _ *struct{}) (*body[AtlasIndex
 }
 
 func (d *Deps) getAuditIndex(ctx context.Context, in *idPath) (*body[IndexBuild], error) {
-	a, _, err := d.ownedAudit(ctx, in.ID)
+	u, err := d.user(ctx)
 	if err != nil {
 		return nil, err
+	}
+	a, err := d.Store.GetAudit(ctx, in.ID)
+	if err != nil {
+		return nil, fail(err)
+	}
+	if (a.UserID != u.ID && u.Role != "admin") || a.HiddenAt != nil {
+		return nil, huma.Error404NotFound("not found")
 	}
 	ix, err := d.Store.GetIndex(ctx, a.ID)
 	if err != nil {
@@ -198,7 +222,19 @@ func (d *Deps) serveIndexPart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ix, err := d.Store.GetIndex(r.Context(), a.ID)
-	if err != nil || !indexHas(ix, table, file) {
+	if err != nil {
+		writeProblem(w, r, http.StatusNotFound, "not found")
+		return
+	}
+	part, ok := indexPart(ix, table, file)
+	if !ok {
+		writeProblem(w, r, http.StatusNotFound, "not found")
+		return
+	}
+	// The digest in the URL has to be the part's, whole as the catalogue
+	// writes it: a stale link from an earlier build is not this part, and
+	// must not be kept as it.
+	if v := r.URL.Query().Get("v"); v != "" && (len(part.SHA256) < 16 || v != part.SHA256[:16]) {
 		writeProblem(w, r, http.StatusNotFound, "not found")
 		return
 	}
@@ -214,7 +250,10 @@ func (d *Deps) serveIndexPart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", indexMime)
-	w.Header().Set("Cache-Control", "private, no-store")
+	// The URL names the content, so the bytes may be kept; the digest is
+	// the tag a browser revalidates with.
+	w.Header().Set("Cache-Control", "private, max-age=31536000, immutable")
+	w.Header().Set("ETag", `"`+part.SHA256+`"`)
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	http.ServeContent(w, r, file, st.ModTime(), f)
 }
@@ -335,6 +374,12 @@ func (d *Deps) sealJobIndex(ctx context.Context, in *opIndexSealIn) (*body[Index
 	if err != nil {
 		return nil, fail(err)
 	}
+	// The map reads the index: build it again now that there is one.
+	if d.Mapper != nil {
+		if err := d.Mapper.Remap(ctx, a); err != nil {
+			slog.Warn("index: remap", "audit", a.ID, "err", err)
+		}
+	}
 	return &body[IndexBuild]{Body: d.buildOf(a, ix)}, nil
 }
 
@@ -353,17 +398,23 @@ func (d *Deps) dropJobIndexStaging(ctx context.Context, in *idPath) (*struct{}, 
 
 // indexHas reports whether the sealed index names the part.
 func indexHas(ix store.AuditIndex, table, file string) bool {
+	_, ok := indexPart(ix, table, file)
+	return ok
+}
+
+// indexPart is the sealed index's record of a part.
+func indexPart(ix store.AuditIndex, table, file string) (core.IndexPart, bool) {
 	for _, t := range ix.Tables {
 		if t.Name != table {
 			continue
 		}
 		for _, p := range t.Parts {
 			if p.File == file {
-				return true
+				return p, true
 			}
 		}
 	}
-	return false
+	return core.IndexPart{}, false
 }
 
 // isParquet checks the magic at both ends of the file.

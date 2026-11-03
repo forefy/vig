@@ -23,6 +23,24 @@ describe('query', () => {
     const n = parseQuery('method!=POST')
     expect(rows.filter((r) => matches(r, facets, n, text)).map((r) => r.name)).toEqual(['/me', 'transfer'])
   })
+  it('keeps a several-valued facet in the order given, and a row counts under each of its values', () => {
+    type F = { title: string; exploitable_by: string[] }
+    const fs: F[] = [
+      { title: 'a', exploitable_by: ['any_user', 'api_key'] },
+      { title: 'b', exploitable_by: ['admin'] },
+      { title: 'c', exploitable_by: ['api_key', 'zeta'] },
+    ]
+    const g = countMultiFacet(fs, 'exploitable', 'exploitable by', (f) => f.exploitable_by, (v) => v, ['anyone', 'any_user', 'api_key', 'admin'])
+    expect(g.values.map((v) => [v.value, v.n])).toEqual([
+      ['any_user', 1],
+      ['api_key', 2],
+      ['admin', 1],
+      ['zeta', 1],
+    ])
+    const keep = (q: string) => fs.filter((f) => matches(f, [g], parseQuery(q), (x) => x.title)).map((f) => f.title)
+    expect(keep('exploitable=api_key')).toEqual(['a', 'c'])
+    expect(keep('exploitable!=api_key')).toEqual(['b'])
+  })
   it('or splits the groups and ~ reads the text', () => {
     const q = parseQuery('kind=instruction|name~log')
     expect(rows.filter((r) => matches(r, facets, q, text)).map((r) => r.name)).toEqual(['/login', 'transfer'])

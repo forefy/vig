@@ -1,9 +1,8 @@
 package main
 
 import (
-	"crypto/sha256"
+	"context"
 	"encoding/base64"
-	"encoding/hex"
 	"errors"
 	"flag"
 	"fmt"
@@ -11,40 +10,122 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	"github.com/forefy/vig/backend/internal/api"
 	"github.com/forefy/vig/backend/internal/core"
+	"github.com/forefy/vig/backend/internal/index"
 )
 
-// indexPartFile is one Parquet part zz wrote, found under the target's
-// directory of a table.
-type indexPartFile struct {
-	Table  string
-	File   string
-	Path   string
-	Bytes  int64
-	SHA256 string
-}
+// indexPartFile is one Parquet part a build wrote, as core finds it.
+type indexPartFile = core.IndexPartFile
 
-// cmdIndex pushes what zz built for the job: every Parquet part under
+// cmdIndex builds the job's index from its checkout and captures, or
+// pushes parts already built: every Parquet part under
 // <root>/index/<table>/target=<slug>/ is staged, then the manifest seals
 // them as the job's index, replacing any earlier one.
 func cmdIndex(w *workspace, args []string) error {
-	const use = "usage: vig-op index push [--root DIR] [--target SLUG] [--tool-version V]"
-	if len(args) < 1 || args[0] != "push" {
+	const use = "usage: vig-op index build [--repo owner/name=DIR]... [--har FILE]... [--names FILE] [--resources FILE] [--out DIR] [--target SLUG] [--push]\n       vig-op index push [--root DIR] [--target SLUG]"
+	if len(args) < 1 {
 		return errors.New(use)
 	}
-	fs := flag.NewFlagSet("index push", flag.ContinueOnError)
-	root := fs.String("root", defaultZZRoot(), "a zz checkout or data dir holding index/<table>/target=<slug>/*.parquet")
-	target := fs.String("target", "", "the zz target slug the operator used (default: the job's audit id)")
-	toolVersion := fs.String("tool-version", "", "zz version to record (default: `zz --version`)")
-	if err := fs.Parse(args[1:]); err != nil {
+	switch args[0] {
+	case "build":
+		return cmdIndexBuild(w, args[1:])
+	case "push":
+		return cmdIndexPush(w, args[1:])
+	}
+	return errors.New(use)
+}
+
+// repeated collects a flag given more than once.
+type repeated []string
+
+func (r *repeated) String() string     { return strings.Join(*r, ",") }
+func (r *repeated) Set(v string) error { *r = append(*r, v); return nil }
+
+// cmdIndexBuild extracts the index. Without --repo it reads the job's
+// checkout at the pinned commit; with --target it builds off the job, for
+// a demo or a dry run.
+func cmdIndexBuild(w *workspace, args []string) error {
+	fs := flag.NewFlagSet("index build", flag.ContinueOnError)
+	var repos, hars repeated
+	fs.Var(&repos, "repo", "owner/name=DIR: a checkout to read (default: the job's)")
+	fs.Var(&hars, "har", "a capture to read; may repeat")
+	names := fs.String("names", "", "a DNS listing: one name per line with what it resolves to")
+	resources := fs.String("resources", "", "a cloud listing: a JSON array of resources")
+	out := fs.String("out", "", "where the parts go (default: <workspace>/index-build)")
+	target := fs.String("target", "", "the target slug (default: the job's audit id)")
+	push := fs.Bool("push", false, "push the parts as the job's index when the build is done")
+	if err := fs.Parse(args); err != nil {
 		return err
 	}
 	if fs.NArg() != 0 {
-		return errors.New(use)
+		return errors.New("usage: vig-op index build [--repo owner/name=DIR]... [--har FILE]... [--names FILE] [--resources FILE] [--out DIR] [--target SLUG] [--push]")
+	}
+	if !index.CanExtract {
+		return errors.New("this build of vig-op carries no parsers: build it with cgo")
+	}
+	slug := *target
+	var inputs []index.RepoInput
+	// Off a job the build needs a target and something to read: a
+	// repository, a capture, a names listing or a cloud listing.
+	given := len(repos) > 0 || len(hars) > 0 || *names != "" || *resources != ""
+	if len(repos) == 0 || slug == "" || *push {
+		job, err := w.job()
+		if err != nil {
+			if slug == "" || !given {
+				return fmt.Errorf("no job here: pass --target and an input (--repo, --har, --names or --resources) to build off a job (%w)", err)
+			}
+		} else {
+			if slug == "" {
+				slug = job.Audit.ID
+			}
+			if len(repos) == 0 {
+				if _, err := os.Stat(w.srcDir()); err != nil {
+					return errors.New("no source here: vig-op claim first, or pass --repo")
+				}
+				inputs = append(inputs, index.RepoInput{Name: job.Audit.Repo, Dir: w.srcDir(), Commit: job.Audit.HeadSHA, Branch: gitBranch(w.srcDir())})
+			}
+		}
+	}
+	for _, r := range repos {
+		name, dir, ok := strings.Cut(r, "=")
+		if !ok || name == "" || dir == "" {
+			return fmt.Errorf("--repo %q: owner/name=DIR", r)
+		}
+		inputs = append(inputs, index.RepoInput{Name: name, Dir: dir, Commit: gitHead(dir), Branch: gitBranch(dir)})
+	}
+	root := *out
+	if root == "" {
+		root = filepath.Join(w.Home, "index-build")
+	}
+	sum, err := index.Build(context.Background(), index.Options{Root: root, Slug: slug, Repos: inputs, HARs: hars, Names: *names, Resources: *resources,
+		Log: func(s string) { fmt.Fprintln(os.Stderr, "vig-op: "+s) }})
+	if err != nil {
+		return err
+	}
+	fmt.Printf("built    %s  %d repos  %d files  %d lines  %d functions  %d calls  %d flows  %d routes\n", slug, len(inputs), sum.Files, sum.Lines, sum.Functions, sum.Calls, sum.Flows, sum.Routes)
+	if sum.Requests > 0 || sum.Subdomains > 0 || sum.Resources > 0 {
+		fmt.Printf("         %d requests  %d bodies  %d hosts  %d names  %d resources\n", sum.Requests, sum.Bodies, sum.Hosts, sum.Subdomains, sum.Resources)
+	}
+	fmt.Printf("         %d edges  %d parts under %s\n", sum.Edges, len(sum.Parts), filepath.Join(root, "index"))
+	if *push {
+		return pushParts(w, sum.Parts)
+	}
+	return nil
+}
+
+// cmdIndexPush stages parts already built and seals them.
+func cmdIndexPush(w *workspace, args []string) error {
+	fs := flag.NewFlagSet("index push", flag.ContinueOnError)
+	root := fs.String("root", "", "the build's root holding index/<table>/target=<slug>/*.parquet (default: <workspace>/index-build)")
+	target := fs.String("target", "", "the target slug the parts were built for (default: the job's audit id)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if fs.NArg() != 0 {
+		return errors.New("usage: vig-op index push [--root DIR] [--target SLUG]")
 	}
 	job, err := w.job()
 	if err != nil {
@@ -54,16 +135,24 @@ func cmdIndex(w *workspace, args []string) error {
 	if slug == "" {
 		slug = job.Audit.ID
 	}
+	if *root == "" {
+		*root = filepath.Join(w.Home, "index-build")
+	}
 	parts, err := indexParts(*root, slug)
 	if err != nil {
 		return err
 	}
 	if len(parts) == 0 {
-		return fmt.Errorf("no parts under %s: expected %s/index/<table>/target=%s/*.parquet (zz index <target> first, or pass --root and --target)", *root, *root, slug)
+		return fmt.Errorf("no parts under %s: expected %s/index/<table>/target=%s/*.parquet (vig-op index build first, or pass --root and --target)", *root, *root, slug)
 	}
-	version := *toolVersion
-	if version == "" {
-		version = zzVersion()
+	return pushParts(w, parts)
+}
+
+// pushParts stages every part under the job's token and seals the index.
+func pushParts(w *workspace, parts []indexPartFile) error {
+	job, err := w.job()
+	if err != nil {
+		return err
 	}
 	base := "/v1/op/jobs/" + job.Audit.ID + "/index"
 	// Anything left from an earlier push goes first, so the seal names
@@ -71,7 +160,6 @@ func cmdIndex(w *workspace, args []string) error {
 	if err := w.call(http.MethodDelete, base+"/staging", nil, nil); err != nil {
 		return err
 	}
-	var total int64
 	for i, p := range parts {
 		raw, err := os.ReadFile(p.Path)
 		if err != nil {
@@ -84,10 +172,9 @@ func cmdIndex(w *workspace, args []string) error {
 		if err := w.call(http.MethodPut, base+"/parts", body, &out); err != nil {
 			return fmt.Errorf("%s/%s: %w", p.Table, p.File, err)
 		}
-		total += p.Bytes
 		fmt.Printf("staged  %3d/%d  %s/%s  %d bytes  sha256 %s\n", i+1, len(parts), p.Table, p.File, p.Bytes, short(p.SHA256))
 	}
-	manifest := indexManifest(parts, "zz", version)
+	manifest := indexManifest(parts, index.Tool, api.Version)
 	var build api.IndexBuild
 	if err := w.call(http.MethodPost, base, manifest, &build); err != nil {
 		return err
@@ -103,104 +190,32 @@ func cmdIndex(w *workspace, args []string) error {
 	return nil
 }
 
-// indexParts walks <root>/index/<table>/target=<slug>/ for every table
-// directory and returns the Parquet parts found, sorted by table and file,
-// with their sizes and digests. A table or file name the server would
-// refuse is skipped with a note rather than failing the whole push.
+// indexParts is core's walk with the notes on stderr.
 func indexParts(root, slug string) ([]indexPartFile, error) {
-	tables, err := os.ReadDir(filepath.Join(root, "index"))
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return nil, nil
-		}
-		return nil, err
-	}
-	var out []indexPartFile
-	for _, t := range tables {
-		if !t.IsDir() {
-			continue
-		}
-		if !core.ValidIndexTable(t.Name()) {
-			fmt.Fprintf(os.Stderr, "vig-op: skipping table %q: lowercase letters, digits and underscores\n", t.Name())
-			continue
-		}
-		dir := filepath.Join(root, "index", t.Name(), "target="+slug)
-		files, err := os.ReadDir(dir)
-		if err != nil {
-			if errors.Is(err, os.ErrNotExist) {
-				continue
-			}
-			return nil, err
-		}
-		for _, f := range files {
-			if f.IsDir() || !strings.HasSuffix(f.Name(), ".parquet") {
-				continue
-			}
-			if !core.ValidIndexFile(f.Name()) {
-				fmt.Fprintf(os.Stderr, "vig-op: skipping %s/%s: a plain .parquet file name\n", t.Name(), f.Name())
-				continue
-			}
-			path := filepath.Join(dir, f.Name())
-			raw, err := os.ReadFile(path)
-			if err != nil {
-				return nil, err
-			}
-			if len(raw) == 0 {
-				fmt.Fprintf(os.Stderr, "vig-op: skipping %s/%s: empty\n", t.Name(), f.Name())
-				continue
-			}
-			sum := sha256.Sum256(raw)
-			out = append(out, indexPartFile{Table: t.Name(), File: f.Name(), Path: path, Bytes: int64(len(raw)), SHA256: hex.EncodeToString(sum[:])})
-		}
-	}
-	sort.Slice(out, func(i, j int) bool {
-		if out[i].Table != out[j].Table {
-			return out[i].Table < out[j].Table
-		}
-		return out[i].File < out[j].File
-	})
-	return out, nil
+	return core.IndexParts(root, slug, func(note string) { fmt.Fprintln(os.Stderr, "vig-op: "+note) })
 }
 
-// indexManifest groups the parts by table, in order. Row counts stay 0:
-// zz does not report them and the server sums bytes itself.
+// indexManifest is core's manifest of the parts.
 func indexManifest(parts []indexPartFile, tool, version string) core.IndexManifest {
-	m := core.IndexManifest{Tool: tool, ToolVersion: version}
-	at := map[string]int{}
-	for _, p := range parts {
-		i, ok := at[p.Table]
-		if !ok {
-			i = len(m.Tables)
-			at[p.Table] = i
-			m.Tables = append(m.Tables, core.IndexTable{Name: p.Table})
-		}
-		m.Tables[i].Parts = append(m.Tables[i].Parts, core.IndexPart{File: p.File, Bytes: p.Bytes, SHA256: p.SHA256})
-		m.Tables[i].Bytes += p.Bytes
-	}
-	return m
+	return core.ManifestOf(parts, tool, version)
 }
 
-// defaultZZRoot is $ZZ_ROOT, else ~/zz.
-func defaultZZRoot() string {
-	if r := os.Getenv("ZZ_ROOT"); r != "" {
-		return r
-	}
-	home, err := os.UserHomeDir()
+func gitHead(dir string) string {
+	out, err := exec.Command("git", "-C", dir, "rev-parse", "HEAD").Output()
 	if err != nil {
-		return "zz"
+		return ""
 	}
-	return filepath.Join(home, "zz")
+	return strings.TrimSpace(string(out))
 }
 
-// zzVersion is the last word of `zz --version`, "unknown" without a zz.
-func zzVersion() string {
-	out, err := exec.Command("zz", "--version").Output()
+func gitBranch(dir string) string {
+	out, err := exec.Command("git", "-C", dir, "rev-parse", "--abbrev-ref", "HEAD").Output()
 	if err != nil {
-		return "unknown"
+		return ""
 	}
-	fields := strings.Fields(string(out))
-	if len(fields) == 0 {
-		return "unknown"
+	b := strings.TrimSpace(string(out))
+	if b == "HEAD" {
+		return ""
 	}
-	return fields[len(fields)-1]
+	return b
 }

@@ -19,6 +19,7 @@ export function Copy({ value, children, className, iconOnly }: { value: string; 
       }}
       className={cn('inline-flex items-center gap-1.5 rounded-sm font-mono text-xs text-muted-foreground hover:text-foreground', className)}
       title="Copy"
+      aria-label="Copy"
     >
       {!iconOnly && (children ?? value)}
       {done ? <Check className={iconOnly ? 'size-3.5 text-ok' : 'size-3 text-ok'} /> : <CopyIcon className={iconOnly ? 'size-3.5' : 'size-3 opacity-60'} />}

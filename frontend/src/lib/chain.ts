@@ -5,10 +5,14 @@ export type Adapter = 'solana' | 'ethereum' | (string & {}) | undefined
 export type ChainWords = {
   evm: boolean
   web: boolean
+  repo: boolean
   program: string
   programs: string
   instruction: string
   instructions: string
+  // What hangs under a place: an account, a parameter, a sink reached.
+  account: string
+  accounts: string
   height: string
   signer: string
   signers: string
@@ -31,10 +35,13 @@ export function chainWords(adapter: Adapter): ChainWords {
   return {
     evm,
     web,
+    repo,
     program: web ? 'host' : evm ? 'contract' : repo ? 'package' : 'program',
     programs: web ? 'hosts' : evm ? 'contracts' : repo ? 'packages' : 'programs',
     instruction: web ? 'route' : evm || repo ? 'function' : 'instruction',
     instructions: web ? 'routes' : evm || repo ? 'functions' : 'instructions',
+    account: web ? 'parameter' : repo ? 'sink' : 'account',
+    accounts: web ? 'parameters' : repo ? 'sinks' : 'accounts',
     height: evm ? 'block' : 'slot',
     signer: evm ? 'sender' : 'signer',
     signers: evm ? 'senders' : 'signers',
@@ -49,7 +56,12 @@ export function chainWords(adapter: Adapter): ChainWords {
     exploitable: {
       anyone: web ? 'anyone, no account' : 'anyone',
       any_user: web ? 'any signed-in user' : 'any user',
-      internal: 'insider (repo or telemetry)',
+      // One actor per tag. A repository's insiders are two actors of their
+      // own, whoever can land code and whoever runs the build; any other
+      // insider standing reads as an insider, a site's as a backend one.
+      internal: web ? 'backend insider' : 'insider',
+      contributor: 'code contributor',
+      pipeline: repo ? 'CI action' : 'CI pipeline',
       any_signer: web ? 'any session' : evm ? 'any account' : 'any signer',
       account_owner: web ? 'account member' : evm ? 'position owner' : 'account owner',
       api_key: 'API key holder',

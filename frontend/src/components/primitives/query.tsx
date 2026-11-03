@@ -18,11 +18,12 @@ export function countFacet<T>(items: T[], key: string, label: string, get: (f: T
 }
 
 // countMultiFacet folds a list by a getter that yields several values per
-// row (a route's methods); a clause holds when any value matches.
-export function countMultiFacet<T>(items: T[], key: string, label: string, get: (f: T) => string[], word: (v: string) => string): Facet<T> {
+// row (a route's methods); a clause holds when any value matches. The
+// values come in a given order or sorted.
+export function countMultiFacet<T>(items: T[], key: string, label: string, get: (f: T) => string[], word: (v: string) => string, orderOf?: readonly string[]): Facet<T> {
   const m = new Map<string, number>()
   for (const f of items) for (const v of new Set(get(f))) m.set(v, (m.get(v) ?? 0) + 1)
-  const keys = [...m.keys()].sort()
+  const keys = orderOf ? [...orderOf.filter((k) => m.has(k)), ...[...m.keys()].filter((k) => !orderOf.includes(k)).sort()] : [...m.keys()].sort()
   return { key, label, valueOf: (f) => get(f).join(' '), allOf: get, values: keys.map((v) => ({ value: v, word: word(v), n: m.get(v) ?? 0 })) }
 }
 

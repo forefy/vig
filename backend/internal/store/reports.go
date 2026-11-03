@@ -195,7 +195,7 @@ func insertFinding(ctx context.Context, tx pgx.Tx, reportID string, f core.Findi
 	id := NewID()
 	_, err := tx.Exec(ctx, `insert into findings(id, report_id, ordinal, severity, title, location, description, exploit_path, fix, refs, status, carried_from_finding_id, evidence, snippet, sites_kind, sites, exploitable_by, visuals, impact, expected, normal_use, fix_sites, fix_kind, reference_code, exhaustion)
 		values($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25)`,
-		id, reportID, f.Ordinal, string(f.Severity), f.Title, loc, f.Description, nullStr(f.ExploitPath), f.Fix, refs, string(status), carried, evidence, snippet, nullStr(string(f.SitesKind)), sites, nullStr(string(f.ExploitableBy)), visuals, nullStr(f.Impact), nullStr(f.Expected), nullStr(f.NormalUse), fixSites, nullStr(string(f.FixKind)), refCode, exhaustion)
+		id, reportID, f.Ordinal, string(f.Severity), f.Title, loc, f.Description, nullStr(f.ExploitPath), f.Fix, refs, string(status), carried, evidence, snippet, nullStr(string(f.SitesKind)), sites, exploitersOf(f.ExploitableBy), visuals, nullStr(f.Impact), nullStr(f.Expected), nullStr(f.NormalUse), fixSites, nullStr(string(f.FixKind)), refCode, exhaustion)
 	return id, wrap(err)
 }
 
@@ -418,7 +418,7 @@ func (s *Store) listFindings(ctx context.Context, db DB, reportID string) ([]Fin
 }
 
 func (s *Store) listFindingsWhere(ctx context.Context, db DB, where string, args ...any) ([]Finding, error) {
-	rows, err := db.Query(ctx, `select f.id, f.report_id, f.ordinal, f.severity, f.title, f.location, f.description, coalesce(f.exploit_path,''), f.fix, f.refs, f.status, coalesce(f.carried_from_finding_id::text,''), f.evidence, f.snippet, coalesce(f.sites_kind,''), f.sites, coalesce(f.exploitable_by,''), f.visuals, coalesce(f.impact,''), coalesce(f.expected,''), coalesce(f.normal_use,''), f.fix_sites, coalesce(f.fix_kind,''), f.reference_code, f.exhaustion, f.created_at, f.updated_at
+	rows, err := db.Query(ctx, `select f.id, f.report_id, f.ordinal, f.severity, f.title, f.location, f.description, coalesce(f.exploit_path,''), f.fix, f.refs, f.status, coalesce(f.carried_from_finding_id::text,''), f.evidence, f.snippet, coalesce(f.sites_kind,''), f.sites, coalesce(f.exploitable_by, '{}'::text[]), f.visuals, coalesce(f.impact,''), coalesce(f.expected,''), coalesce(f.normal_use,''), f.fix_sites, coalesce(f.fix_kind,''), f.reference_code, f.exhaustion, f.created_at, f.updated_at
 		from findings f join reports r on r.id=f.report_id join audits pa on pa.id=r.audit_id join targets pt on pt.id=pa.target_id where `+where+` order by f.ordinal`, args...)
 	if err != nil {
 		return nil, err
@@ -430,8 +430,12 @@ func (s *Store) listFindingsWhere(ctx context.Context, db DB, where string, args
 		var loc, refs, evidence, snippet, sites, visuals, impact, expected, normalUse, fixSites, refCode, exhaustion []byte
 		var fixKind string
 		var sitesKind string
-		if err := rows.Scan(&f.ID, &f.ReportID, &f.Ordinal, &f.Severity, &f.Title, &loc, &f.Description, &f.ExploitPath, &f.Fix, &refs, &f.Status, &f.CarriedFromID, &evidence, &snippet, &sitesKind, &sites, &f.ExploitableBy, &visuals, &impact, &expected, &normalUse, &fixSites, &fixKind, &refCode, &exhaustion, &f.CreatedAt, &f.UpdatedAt); err != nil {
+		var exploiters []string
+		if err := rows.Scan(&f.ID, &f.ReportID, &f.Ordinal, &f.Severity, &f.Title, &loc, &f.Description, &f.ExploitPath, &f.Fix, &refs, &f.Status, &f.CarriedFromID, &evidence, &snippet, &sitesKind, &sites, &exploiters, &visuals, &impact, &expected, &normalUse, &fixSites, &fixKind, &refCode, &exhaustion, &f.CreatedAt, &f.UpdatedAt); err != nil {
 			return nil, err
+		}
+		for _, e := range exploiters {
+			f.ExploitableBy = append(f.ExploitableBy, core.ExploitableBy(e))
 		}
 		_ = json.Unmarshal(loc, &f.Location)
 		_ = json.Unmarshal(refs, &f.References)
@@ -707,4 +711,17 @@ func (s *Store) Publish(ctx context.Context, reportID, slug string) error {
 func (s *Store) Unpublish(ctx context.Context, reportID string) error {
 	_, err := s.Pool.Exec(ctx, `update reports set published_at=null where id=$1`, reportID)
 	return err
+}
+
+// exploitersOf is a finding's actors as the column holds them: a list, or
+// null for none named.
+func exploitersOf(e core.Exploiters) []string {
+	if len(e) == 0 {
+		return nil
+	}
+	out := make([]string, len(e))
+	for i, v := range e {
+		out[i] = string(v)
+	}
+	return out
 }

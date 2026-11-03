@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -264,7 +265,7 @@ func TestIndexFlow(t *testing.T) {
 		t.Fatalf("calls table: %+v", build.Tables[0])
 	}
 	partURL := build.Tables[0].Parts[1].URL
-	if partURL != "/v1/audits/"+A+"/index/calls/part-2.parquet" {
+	if !strings.HasPrefix(partURL, "/v1/audits/"+A+"/index/calls/part-2.parquet"+"?v=") {
 		t.Fatalf("part url %q", partURL)
 	}
 	if exists(h.indexPath(A, ".staging")) || !exists(h.indexPath(A, "calls", "part-1.parquet")) || !exists(h.indexPath(A, "repos", "part-1.parquet")) {
@@ -276,7 +277,7 @@ func TestIndexFlow(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("audit index: %d %s", rr.Code, rr.Body)
 	}
-	if got := decode[IndexBuild](t, rr); got.Repo != "acme/vault" || got.Adapter != "solana" || got.Tables[1].Parts[0].URL != "/v1/audits/"+A+"/index/repos/part-1.parquet" {
+	if got := decode[IndexBuild](t, rr); got.Repo != "acme/vault" || got.Adapter != "solana" || !strings.HasPrefix(got.Tables[1].Parts[0].URL, "/v1/audits/"+A+"/index/repos/part-1.parquet?v=") {
 		t.Fatalf("audit index: %+v", got)
 	}
 	rr = h.do(http.MethodGet, "/v1/atlas/index", h.ownerK, nil)
@@ -293,8 +294,20 @@ func TestIndexFlow(t *testing.T) {
 	if rr.Code != http.StatusOK || rr.Header().Get("Content-Type") != indexMime || !bytes.Equal(rr.Body.Bytes(), calls2) {
 		t.Fatalf("get part: %d %s %q", rr.Code, rr.Header().Get("Content-Type"), rr.Body)
 	}
-	if rr.Header().Get("Accept-Ranges") != "bytes" || rr.Header().Get("Cache-Control") != "private, no-store" {
+	if rr.Header().Get("Accept-Ranges") != "bytes" || rr.Header().Get("Cache-Control") != "private, max-age=31536000, immutable" || rr.Header().Get("ETag") == "" {
 		t.Fatalf("part headers: %v", rr.Header())
+	}
+	// A URL naming another digest is not this part.
+	for _, v := range []string{"0000000000000000", "8", strings.Split(partURL, "?v=")[1][:15]} {
+		rr = h.do(http.MethodGet, strings.Split(partURL, "?")[0]+"?v="+v, h.ownerK, nil)
+		if rr.Code != http.StatusNotFound {
+			t.Fatalf("digest %q: %d", v, rr.Code)
+		}
+	}
+	// HEAD answers with the length and no body, so DuckDB reads by Range.
+	rr = h.do(http.MethodHead, partURL, h.ownerK, nil)
+	if rr.Code != http.StatusOK || rr.Body.Len() != 0 || rr.Header().Get("Content-Length") == "" || rr.Header().Get("Accept-Ranges") != "bytes" {
+		t.Fatalf("head part: %d body %d headers %v", rr.Code, rr.Body.Len(), rr.Header())
 	}
 	rr = h.do(http.MethodGet, partURL, h.ownerK, nil, "Range", "bytes=4-8")
 	if rr.Code != http.StatusPartialContent || !bytes.Equal(rr.Body.Bytes(), calls2[4:9]) || rr.Header().Get("Content-Type") != indexMime {
@@ -319,6 +332,14 @@ func TestIndexFlow(t *testing.T) {
 	rr = h.do(http.MethodGet, "/v1/atlas/index", h.otherK, nil)
 	if rr.Code != http.StatusOK || len(decode[AtlasIndex](t, rr).Audits) != 0 {
 		t.Fatalf("other user's atlas: %d %s", rr.Code, rr.Body)
+	}
+	// An admin lists every build and reads any audit's index.
+	actx := context.WithValue(h.ctx, principalKey{}, auth.Principal{UserID: h.admin.ID, Role: "admin", Via: auth.ViaSession})
+	if got, err := h.d.getAtlasIndex(actx, nil); err != nil || len(got.Body.Audits) != 1 || got.Body.Audits[0].AuditID != A {
+		t.Fatalf("admin atlas: %+v %v", got, err)
+	}
+	if got, err := h.d.getAuditIndex(actx, &idPath{ID: A}); err != nil || got.Body.AuditID != A {
+		t.Fatalf("admin audit index: %+v %v", got, err)
 	}
 	// Anonymous: sign in required on the part route too.
 	if rr := h.do(http.MethodGet, partURL, "", nil); rr.Code != http.StatusUnauthorized {
@@ -379,7 +400,6 @@ func TestIndexFlow(t *testing.T) {
 	}
 
 	// Admin delete of the audit removes the files with the row.
-	actx := context.WithValue(h.ctx, principalKey{}, auth.Principal{UserID: h.admin.ID, Role: "admin", Via: auth.ViaSession})
 	if _, err := h.d.deleteAudit(actx, A, "test"); err != nil {
 		t.Fatalf("delete audit: %v", err)
 	}

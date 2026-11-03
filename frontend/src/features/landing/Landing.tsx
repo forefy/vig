@@ -8,7 +8,8 @@ import { ScanForm } from '@/features/scan/ScanForm'
 import { GridBug } from './GridBug'
 import { freeNodes } from './grid'
 
-const SHOWCASE = import.meta.env.VITE_SHOWCASE_REPORT ?? 'vault-signer-check'
+// The published report the grid bug walks to; none until one is published.
+const SHOWCASE = import.meta.env.VITE_SHOWCASE_REPORT ?? ''
 
 // Landing archetype: a blueprint. The mark drawn large on a grid, one
 // headline, one input. The only thing that moves is the bug.
@@ -91,7 +92,7 @@ export function Landing() {
       <div className="h-24" />
 
       {/* Last, so the point and its card sit above the page it walks on. */}
-      {grid.free.size > 8 && <GridBug {...grid} slug={SHOWCASE} />}
+      {SHOWCASE && grid.free.size > 8 && <GridBug {...grid} slug={SHOWCASE} />}
     </div>
   )
 }

@@ -106,6 +106,11 @@ type SurfaceInput struct {
 	Clone    *Clone
 	Base     *Clone // the base commit of a diff audit, when checked out
 	Budget   SurfaceBudget
+	// Repo is the target's repository, for a builder that maps without a
+	// checkout; Index is the directory of the audit's sealed index parts
+	// (DATA_DIR/index/<audit>), empty until an operator pushed one.
+	Repo  string
+	Index string
 	// Siblings are other deployments of the same repository, on any
 	// chain: what an adapter may borrow names from when a subject's own
 	// interface does not know a call or an error.
@@ -311,7 +316,8 @@ func (s *Surface) Attend(evidence []SurfaceEvidence, findings []Finding) {
 // matches reports whether a finding location points at this node: on the
 // web, the route whose host and folded path are the location's URL; on
 // chain, the program in its facts and the instruction by name, ignoring
-// case and underscores so snake and camel spellings meet.
+// case and underscores so snake and camel spellings meet; in a plain
+// repository, the function whose file and lines hold the location.
 func (n *SurfaceNode) matches(loc Location) bool {
 	if loc.URL != "" {
 		if n.Kind != "route" {
@@ -319,6 +325,17 @@ func (n *SurfaceNode) matches(loc Location) bool {
 		}
 		host, shape, ok := WebPlace(loc.URL)
 		return ok && n.Facts["host"] == host && n.Facts["path"] == shape
+	}
+	if loc.Instruction == "" && loc.File != "" && n.Kind == "instruction" && n.Facts["file"] == loc.File {
+		from, to := atoi(n.Facts["line"]), atoi(n.Facts["line_end"])
+		if to == 0 {
+			to = from
+		}
+		end := loc.LineEnd
+		if end == 0 {
+			end = loc.LineStart
+		}
+		return from > 0 && loc.LineStart <= to && end >= from
 	}
 	if loc.Instruction == "" || n.Kind != "instruction" {
 		return false
@@ -331,4 +348,15 @@ func (n *SurfaceNode) matches(loc Location) bool {
 
 func fold(s string) string {
 	return strings.ToLower(strings.ReplaceAll(s, "_", ""))
+}
+
+func atoi(s string) int {
+	n := 0
+	for _, c := range s {
+		if c < '0' || c > '9' {
+			return 0
+		}
+		n = n*10 + int(c-'0')
+	}
+	return n
 }

@@ -59,6 +59,7 @@ func (d *Deps) registerMe(api huma.API) {
 	huma.Register(api, withAuth(op("installURL", http.MethodGet, "/v1/me/github/install-url", "Where to install the GitHub App", "me"), userAuth), d.installURL)
 	huma.Register(api, withAuth(op("listNotifications", http.MethodGet, "/v1/me/notifications", "Notifications", "me"), userAuth), d.listNotifications)
 	huma.Register(api, withAuth(op("readNotification", http.MethodPatch, "/v1/me/notifications/{id}/read", "Mark read", "me"), userAuth), d.readNotification)
+	huma.Register(api, withAuth(op("readAllNotifications", http.MethodPost, "/v1/me/notifications/read", "Mark every unread notification read", "me"), userAuth), d.readAllNotifications)
 	huma.Register(api, withAuth(op("listLedger", http.MethodGet, "/v1/me/ledger", "Credit ledger", "me"), userAuth), d.listLedger)
 	huma.Register(api, withAuth(op("getPlan", http.MethodGet, "/v1/me/plan", "Active plan and next slot", "me"), userAuth), d.getPlan)
 	huma.Register(api, withAuth(op("totpSetup", http.MethodPost, "/v1/me/totp/setup", "Start TOTP enrolment; returns the secret once", "me"), userAuth), d.totpSetup)
@@ -338,6 +339,23 @@ func (d *Deps) readNotification(ctx context.Context, in *idPath) (*struct{}, err
 		return nil, fail(err)
 	}
 	return nil, nil
+}
+
+// MarkedRead says how many notifications one call marked read.
+type MarkedRead struct {
+	Marked int64 `json:"marked"`
+}
+
+func (d *Deps) readAllNotifications(ctx context.Context, _ *struct{}) (*body[MarkedRead], error) {
+	u, err := d.user(ctx)
+	if err != nil {
+		return nil, err
+	}
+	n, err := d.Store.MarkAllRead(ctx, u.ID)
+	if err != nil {
+		return nil, fail(err)
+	}
+	return &body[MarkedRead]{Body: MarkedRead{Marked: n}}, nil
 }
 
 func (d *Deps) listLedger(ctx context.Context, _ *struct{}) (*body[list[LedgerRow]], error) {

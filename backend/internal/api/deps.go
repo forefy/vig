@@ -43,7 +43,9 @@ type Deps struct {
 	Notifier     *notify.Notifier
 	Discord      *notify.Discord
 	Scans        *jobs.ScanRunner
-	HTTP         *http.Client
+	// Mapper rebuilds an audit's map when its index arrives.
+	Mapper *jobs.SurfaceMapper
+	HTTP   *http.Client
 	// Now is the clock; tests override it.
 	Now func() time.Time
 	// BaseCtx is the process context fire-and-forget work runs under, so a

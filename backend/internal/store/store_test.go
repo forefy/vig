@@ -521,7 +521,7 @@ func TestAdminCancelHideAndRevise(t *testing.T) {
 	// one removed, one added; the audit and the slug move to the new version.
 	rev := doc
 	rev.Findings = []core.Finding{
-		{Ordinal: 1, Severity: core.SeverityMedium, Title: "Missing signer", Location: core.Location{File: "src/lib.rs", LineStart: 5}, Description: "d2", Fix: "- f2", FixKind: core.FixOperational},
+		{Ordinal: 1, Severity: core.SeverityMedium, Title: "Missing signer", Location: core.Location{File: "src/lib.rs", LineStart: 5}, Description: "d2", Fix: "- f2", FixKind: core.FixOperational, ExploitableBy: core.Exploiters{core.ExploitableAPIKey, core.ExploitableAnyUser}},
 		{Ordinal: 2, Severity: core.SeverityInfo, Title: "Closed orders kept", Location: core.Location{File: "src/lib.rs", LineStart: 20}, Description: "d", Fix: "- f", FixKind: core.FixOperational},
 	}
 	out, err := f.s.ReviseReport(f.ctx, a.ID, rev, f.user.ID, "re-tested after the fix")
@@ -540,6 +540,14 @@ func TestAdminCancelHideAndRevise(t *testing.T) {
 	kept := out.Report.Findings[0]
 	if kept.Status != core.FindingAcknowledged || kept.CarriedFromID != "" || kept.Snippet == nil || kept.Snippet.Code != "x" || kept.Severity != core.SeverityMedium {
 		t.Fatalf("kept finding: %+v", kept)
+	}
+	// Everyone who can reach a finding is stored as a list, least privileged
+	// first; a finding that names nobody reads back as nobody.
+	if got := kept.ExploitableBy; len(got) != 2 || got[0] != core.ExploitableAnyUser || got[1] != core.ExploitableAPIKey {
+		t.Fatalf("exploitable_by: %v", got)
+	}
+	if got := out.Report.Findings[1].ExploitableBy; got != nil {
+		t.Fatalf("exploitable_by of a finding naming nobody: %v", got)
 	}
 	cur, err := f.s.GetReportByAudit(f.ctx, a.ID)
 	if err != nil || cur.ID != out.Report.ID {
@@ -914,5 +922,46 @@ func TestRevisionFollowsIDWhenRetitled(t *testing.T) {
 	h := rev.Report.Findings[0].SeverityChanges
 	if rev.Kept != 1 || len(h) != 1 || h[0].Reason != "not reachable from outside" {
 		t.Fatalf("kept %d, history %+v", rev.Kept, h)
+	}
+}
+
+// One call marks every unread notification of a user read, and only theirs.
+func TestMarkAllRead(t *testing.T) {
+	f := newFixture(t)
+	other, err := f.s.CreateUser(f.ctx, f.s.Pool, "other", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 3; i++ {
+		if _, err := f.s.CreateNotification(f.ctx, store.Notification{UserID: f.user.ID, Kind: "audit_overdue", Channels: []string{"inapp"}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	read, err := f.s.CreateNotification(f.ctx, store.Notification{UserID: f.user.ID, Kind: "audit_state", Channels: []string{"inapp"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := f.s.MarkRead(f.ctx, f.user.ID, read.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.s.CreateNotification(f.ctx, store.Notification{UserID: other.ID, Kind: "audit_overdue", Channels: []string{"inapp"}}); err != nil {
+		t.Fatal(err)
+	}
+	n, err := f.s.MarkAllRead(f.ctx, f.user.ID)
+	if err != nil || n != 3 {
+		t.Fatalf("marked %d, %v", n, err)
+	}
+	if n, _ := f.s.MarkAllRead(f.ctx, f.user.ID); n != 0 {
+		t.Fatalf("second call marked %d", n)
+	}
+	mine, _ := f.s.ListNotifications(f.ctx, f.user.ID)
+	for _, x := range mine {
+		if x.ReadAt == nil {
+			t.Fatalf("left unread: %+v", x)
+		}
+	}
+	theirs, _ := f.s.ListNotifications(f.ctx, other.ID)
+	if len(theirs) != 1 || theirs[0].ReadAt != nil {
+		t.Fatalf("another user's notification was touched: %+v", theirs)
 	}
 }

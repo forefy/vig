@@ -68,10 +68,17 @@ func (s *Store) DeleteIndex(ctx context.Context, auditID string) error {
 	return err
 }
 
-// ListIndexedAudits returns the owner's audits that carry an index, newest
-// first, with the index row of each.
+// ListIndexedAudits returns the audits that carry an index, newest first,
+// with the index row of each: the owner's, or every user's when no owner
+// is named.
 func (s *Store) ListIndexedAudits(ctx context.Context, userID string) ([]Audit, map[string]AuditIndex, error) {
-	audits, err := s.listAudits(ctx, `where a.user_id=$1 and a.hidden_at is null and exists (select 1 from audit_indexes i where i.audit_id=a.id) order by a.created_at desc`, userID)
+	cond := `a.hidden_at is null and exists (select 1 from audit_indexes i where i.audit_id=a.id)`
+	var args []any
+	if userID != "" {
+		cond = `a.user_id=$1 and ` + cond
+		args = append(args, userID)
+	}
+	audits, err := s.listAudits(ctx, `where `+cond+` order by a.created_at desc`, args...)
 	if err != nil {
 		return nil, nil, err
 	}

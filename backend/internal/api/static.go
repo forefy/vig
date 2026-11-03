@@ -46,10 +46,14 @@ func isNoindex(p string) bool {
 	return false
 }
 
-// static serves the built frontend from Config.StaticDir.
+// static serves the built frontend from Config.StaticDir. index is the
+// prerendered landing page; shell is the same document with an empty root,
+// what every route the prerender did not write gets, so the client renders
+// it rather than hydrating the landing page's markup against another page.
 type static struct {
 	dir   string
 	index []byte
+	shell []byte
 	d     *Deps
 
 	mu    sync.Mutex
@@ -67,7 +71,27 @@ func newStatic(d *Deps) (*static, error) {
 	if err != nil {
 		return nil, fmt.Errorf("static: %w", err)
 	}
-	return &static{dir: d.Config.StaticDir, index: index, d: d, cache: map[string]cachedPage{}}, nil
+	return &static{dir: d.Config.StaticDir, index: index, shell: shellOf(index), d: d, cache: map[string]cachedPage{}}, nil
+}
+
+// shellOf is index.html with the prerendered root emptied: everything from
+// the root div to the last div before the body's end.
+func shellOf(index []byte) []byte {
+	open := []byte(`<div id="root">`)
+	start := bytes.Index(index, open)
+	end := bytes.LastIndex(index, []byte("</body>"))
+	if start < 0 || end < 0 {
+		return index
+	}
+	last := bytes.LastIndex(index[:end], []byte("</div>"))
+	if last < start {
+		return index
+	}
+	out := make([]byte, 0, len(index))
+	out = append(out, index[:start]...)
+	out = append(out, open...)
+	out = append(out, index[last:]...)
+	return out
 }
 
 // mount registers the static routes on r. The catch-all is chi's NotFound so
@@ -111,7 +135,11 @@ func (s *static) serve(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	s.html(w, http.StatusOK, s.index)
+	if p == "/" {
+		s.html(w, http.StatusOK, s.index)
+		return
+	}
+	s.html(w, http.StatusOK, s.shell)
 }
 
 func (s *static) html(w http.ResponseWriter, status int, body []byte) {
@@ -212,7 +240,7 @@ func reportHeadOf(rep store.Report, site string) reportHead {
 // injectHead strips the prerendered landing tags from index.html and adds
 // the report's.
 func (s *static) injectHead(h reportHead) []byte {
-	out := headTag.ReplaceAll(s.index, nil)
+	out := headTag.ReplaceAll(s.shell, nil)
 	var b strings.Builder
 	esc := html.EscapeString
 	fmt.Fprintf(&b, "\n    <title>%s</title>", esc(h.title))

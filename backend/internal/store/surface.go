@@ -166,6 +166,21 @@ func (s *Store) ClaimSurfaceWork(ctx context.Context) (Audit, bool, error) {
 	return a, err == nil, err
 }
 
+// ResetSurface drops an audit's map and its attempt count, so the mapper
+// builds it again from what the audit now has.
+func (s *Store) ResetSurface(ctx context.Context, auditID string) error {
+	if !ValidID(auditID) {
+		return ErrNotFound
+	}
+	return s.Tx(ctx, func(tx pgx.Tx) error {
+		if _, err := tx.Exec(ctx, `delete from audit_surfaces where audit_id=$1`, auditID); err != nil {
+			return err
+		}
+		_, err := tx.Exec(ctx, `update audits set surface_attempts=0, surface_tried_at=null, surface_error=null where id=$1`, auditID)
+		return err
+	})
+}
+
 // SetSurfaceError records why the last mapping attempt failed.
 func (s *Store) SetSurfaceError(ctx context.Context, auditID, msg string) error {
 	_, err := s.Pool.Exec(ctx, `update audits set surface_error=$2 where id=$1`, auditID, msg)

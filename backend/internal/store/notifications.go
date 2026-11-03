@@ -169,6 +169,16 @@ func (s *Store) MarkRead(ctx context.Context, userID, id string) error {
 	return nil
 }
 
+// MarkAllRead sets read_at on every unread notification of a user and
+// says how many it marked.
+func (s *Store) MarkAllRead(ctx context.Context, userID string) (int64, error) {
+	tag, err := s.Pool.Exec(ctx, `update notifications set read_at=now() where user_id=$1 and read_at is null`, userID)
+	if err != nil {
+		return 0, err
+	}
+	return tag.RowsAffected(), nil
+}
+
 // LogAdminAction appends to the admin log.
 func (s *Store) LogAdminAction(ctx context.Context, a AdminAction) (AdminAction, error) {
 	return s.logAdminAction(ctx, s.Pool, a)

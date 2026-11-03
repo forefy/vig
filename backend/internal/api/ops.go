@@ -21,7 +21,7 @@ import (
 // appCSP is the policy for the app shell, prerendered pages and JSON. Fonts
 // come from Google Fonts (the only third party the frontend loads); images
 // may come from any https origin because reports embed repository avatars.
-const appCSP = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
+const appCSP = "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
 	"font-src https://fonts.gstatic.com 'self' data:; img-src 'self' data: https:; connect-src 'self' https: wss:; " +
 	"frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
 

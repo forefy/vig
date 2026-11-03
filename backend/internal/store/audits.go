@@ -148,6 +148,19 @@ func (s *Store) listAudits(ctx context.Context, where string, args ...any) ([]Au
 	return out, rows.Err()
 }
 
+// LatestAuditByRepo is the newest audit, hidden ones apart, whose target
+// is the repository.
+func (s *Store) LatestAuditByRepo(ctx context.Context, repo string) (Audit, error) {
+	out, err := s.listAudits(ctx, `where t.repo_full_name=$1 and a.hidden_at is null order by a.created_at desc limit 1`, repo)
+	if err != nil {
+		return Audit{}, err
+	}
+	if len(out) == 0 {
+		return Audit{}, ErrNotFound
+	}
+	return out[0], nil
+}
+
 // ListAudits returns a user's audits, newest first.
 func (s *Store) ListAudits(ctx context.Context, userID string) ([]Audit, error) {
 	return s.listAudits(ctx, `where a.user_id=$1 and a.hidden_at is null order by a.created_at desc`, userID)

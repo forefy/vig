@@ -574,7 +574,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Every index across the user's audits, with where each Parquet part is */
+        /** Every index across the user's audits (every user's for an admin), with where each Parquet part is */
         get: operations["getAtlasIndex"];
         put?: never;
         post?: never;
@@ -1116,6 +1116,23 @@ export interface paths {
         patch: operations["setNotificationPrefs"];
         trace?: never;
     };
+    "/v1/me/notifications/read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Mark every unread notification read */
+        post: operations["readAllNotifications"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/me/notifications/{id}/read": {
         parameters: {
             query?: never;
@@ -1653,23 +1670,6 @@ export interface paths {
         };
         /** Scan result */
         get: operations["getScan"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/surface": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Every node across the user's maps, with its audit, attention and findings */
-        get: operations["getSurfaceIndex"];
         put?: never;
         post?: never;
         delete?: never;
@@ -2566,11 +2566,8 @@ export interface components {
             exploit_path?: string;
             /** @description An exploit path exists on this finding but is shown only to verified owners */
             exploit_path_withheld?: boolean;
-            /**
-             * @description Recommended. The privilege an attacker needs to reach this finding, from least to most: anyone (no account, no session), any_user (any signed-in account) or any_signer (any funded key), account_owner (a member of the affected account or position), api_key (an integration's credentials), internal_network (inside the network or a VPN), admin (a privileged role), upgrade_authority (the platform operator or upgrade key), other_program (only through another program or service), internal (insider standing on the code or the telemetry: repo, snapshot or store access, never a customer), none. Shown to every reader
-             * @enum {string}
-             */
-            exploitable_by?: "anyone" | "any_user" | "internal" | "any_signer" | "account_owner" | "admin" | "upgrade_authority" | "other_program" | "internal_network" | "api_key" | "none";
+            /** @description Recommended. Everyone who can reach this finding, one actor or several, each by the privilege an attacker needs, from least to most: anyone (no account, no session), any_user (any signed-in account) or any_signer (any funded key), account_owner (a member of the affected account or position), api_key (an integration's credentials), internal_network (inside the network or a VPN), contributor (whoever can land code in the repository), pipeline (whoever runs or changes the build: a CI workflow, an action, a build secret), internal (other insider standing on the code or the telemetry: snapshot or store access, never a customer), admin (a privileged role), upgrade_authority (the platform operator or upgrade key), other_program (only through another program or service); or none alone. Kept least privileged first. A single string reads as a list of one. Shown to every reader */
+            exploitable_by?: ("anyone" | "any_user" | "internal" | "contributor" | "pipeline" | "any_signer" | "account_owner" | "admin" | "upgrade_authority" | "other_program" | "internal_network" | "api_key" | "none")[] | null;
             /** @description Required. A '- ' bullet per change. A code fence (three backticks on their own line, closed the same way) right after a bullet carries the definite fix: the correct code, the exact header value, the configuration line. A fence whose info line names a place, like rust src/lib.rs:41-45, is shown as a patch replacing those lines (path:line alone inserts before it) */
             fix: string;
             /**
@@ -2735,25 +2732,6 @@ export interface components {
             /** @description The user being viewed */
             user_id: string;
         };
-        IndexAudit: {
-            /** @enum {string} */
-            adapter: "solana" | "ethereum" | "webapp" | "repo";
-            /** @description For a site, the origin the audit is about */
-            base_url?: string;
-            /** Format: date-time */
-            built_at: string;
-            /** @enum {string} */
-            coverage: "full" | "diff";
-            head_sha: string;
-            id: string;
-            /** @description How much of the map traffic and replays reached */
-            map?: components["schemas"]["SurfaceCoverage"];
-            /** Format: int64 */
-            nodes: number;
-            repo: string;
-            state: string;
-            target_id: string;
-        };
         IndexBuild: {
             /**
              * Format: uri
@@ -2792,15 +2770,6 @@ export interface components {
             /** Format: int64 */
             rows?: number;
         };
-        IndexFinding: {
-            /** Format: int64 */
-            ordinal: number;
-            /** @enum {string} */
-            severity: "critical" | "high" | "medium" | "low" | "info";
-            /** @enum {string} */
-            status: "open" | "acknowledged" | "fixed" | "disputed" | "archived";
-            title: string;
-        };
         IndexManifest: {
             /**
              * Format: uri
@@ -2812,34 +2781,6 @@ export interface components {
             /** @example zz */
             tool: string;
             tool_version?: string;
-        };
-        IndexNode: {
-            /** @enum {string} */
-            attention: "unseen" | "observed" | "reviewed" | "finding";
-            audit_id: string;
-            external?: boolean;
-            facts?: {
-                [key: string]: string;
-            };
-            /** Format: int64 */
-            failed?: number;
-            findings?: components["schemas"]["IndexFinding"][] | null;
-            id: string;
-            /** @description program, instruction, account, host, route, param */
-            kind: string;
-            /** Format: date-time */
-            last_seen?: string;
-            name: string;
-            /** Format: int64 */
-            observed: number;
-            /** Format: int64 */
-            ok?: number;
-            parent?: string;
-            /** Format: int64 */
-            replays?: number;
-            /** Format: int64 */
-            signers?: number;
-            source: string;
         };
         IndexPart: {
             /** Format: int64 */
@@ -3139,6 +3080,16 @@ export interface components {
              * @description For webapp targets, the live endpoint the finding is about
              */
             url?: string;
+        };
+        MarkedRead: {
+            /**
+             * Format: uri
+             * @description A URL to the JSON Schema for this object.
+             * @example https://example.com/schemas/MarkedRead.json
+             */
+            readonly $schema?: string;
+            /** Format: int64 */
+            marked: number;
         };
         Me: {
             /**
@@ -4082,16 +4033,6 @@ export interface components {
             summary?: {
                 [key: string]: unknown;
             };
-        };
-        SurfaceIndex: {
-            /**
-             * Format: uri
-             * @description A URL to the JSON Schema for this object.
-             * @example https://example.com/schemas/SurfaceIndex.json
-             */
-            readonly $schema?: string;
-            audits: components["schemas"]["IndexAudit"][] | null;
-            nodes: components["schemas"]["IndexNode"][] | null;
         };
         SurfaceNode: {
             /** @enum {string} */
@@ -6823,6 +6764,35 @@ export interface operations {
             };
         };
     };
+    readAllNotifications: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MarkedRead"];
+                };
+            };
+            /** @description Error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ErrorModel"];
+                };
+            };
+        };
+    };
     readNotification: {
         parameters: {
             query?: never;
@@ -7902,35 +7872,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Scan"];
-                };
-            };
-            /** @description Error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ErrorModel"];
-                };
-            };
-        };
-    };
-    getSurfaceIndex: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SurfaceIndex"];
                 };
             };
             /** @description Error */

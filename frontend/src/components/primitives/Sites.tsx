@@ -25,7 +25,12 @@ type Step =
 // recording, the dump. A flow numbers the code steps left to right;
 // occurrences are a row of file:line tabs between the same two ends. The
 // report never grows; the reader switches.
-export function FindingCode({ finding, visualSrc, pin, links }: { finding: Finding; visualSrc?: (id: string) => string; pin?: { repo: string; commit: string }; links?: LinkTarget[] }) {
+//
+// A step has a key a link can carry: `use`, `expected`, a code step's
+// number, `impact`. `open` is the key to open on, `onOpen` hears each switch.
+const stepKey = (st: Step) => (st.kind === 'code' ? String(st.n) : st.kind)
+
+export function FindingCode({ finding, visualSrc, pin, links, open, onOpen, id }: { finding: Finding; visualSrc?: (id: string) => string; pin?: { repo: string; commit: string }; links?: LinkTarget[]; open?: string; onOpen?: (key: string) => void; id?: string }) {
   const sites: Site[] = (finding.sites ?? []).length > 0
     ? (finding.sites ?? [])
     : [{ location: finding.location, snippet: finding.snippet ?? undefined }]
@@ -35,7 +40,7 @@ export function FindingCode({ finding, visualSrc, pin, links }: { finding: Findi
     ...sites.map((site, i) => ({ kind: 'code', site, n: i + 1 }) as Step),
     ...(finding.impact ? [{ kind: 'impact', text: finding.impact } as Step] : []),
   ]
-  const [active, setActive] = useState(0)
+  const [active, setActive] = useState(() => Math.max(0, steps.findIndex((st) => stepKey(st) === open)))
   const step = steps[Math.min(active, steps.length - 1)] ?? steps[0]
   if (!step) return null
   const flow = finding.sites_kind === 'flow' || sites.length === 1
@@ -46,7 +51,7 @@ export function FindingCode({ finding, visualSrc, pin, links }: { finding: Findi
   const own = visualSrc ? (finding.visuals ?? []) : []
   const showOwn = own.length > 0 && Math.min(active, last) === last
   return (
-    <div className="flex flex-col gap-2">
+    <div id={id} className="flex scroll-mt-6 flex-col gap-2">
       {multi && (
         <div className="flex flex-wrap items-center gap-1" role="tablist">
           {steps.map((st, i) => {
@@ -61,7 +66,10 @@ export function FindingCode({ finding, visualSrc, pin, links }: { finding: Findi
                 type="button"
                 role="tab"
                 aria-selected={i === active}
-                onClick={() => setActive(i)}
+                onClick={() => {
+                  setActive(i)
+                  onOpen?.(stepKey(st))
+                }}
                 title={caption ? `${label}\n${caption}` : label}
                 className={cn(
                   'flex min-h-7 items-center gap-2 rounded-md border px-2.5 py-1 text-left font-mono text-[11px]',

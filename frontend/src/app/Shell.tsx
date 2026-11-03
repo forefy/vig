@@ -1,5 +1,5 @@
 import { NavLink, Outlet, Link } from 'react-router'
-import { LayoutGrid, ListChecks, Radar, Settings, ShieldCheck, LogOut } from 'lucide-react'
+import { LayoutGrid, ListChecks, Settings, ShieldCheck, LogOut, Radar } from 'lucide-react'
 import { Mark } from '@/components/primitives'
 import { useMe } from '@/features/auth/useMe'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'

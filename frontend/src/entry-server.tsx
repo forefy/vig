@@ -6,7 +6,9 @@ import { TooltipProvider } from '@/components/ui/tooltip'
 import { publicRoutes } from './app/publicRoutes'
 
 // Prerender entry: public routes only, no wallet, no session. Output is static
-// HTML with the page's own head tags; the client hydrates on load.
+// HTML with the page's own head tags; the client hydrates on load. No
+// hydration data is written: the public routes have no loaders, and the
+// inline script it would take is what the app's CSP forbids.
 export async function render(url: string): Promise<{ html: string; head: string }> {
   const handler = createStaticHandler(publicRoutes)
   const context = await handler.query(new Request(`http://prerender${url}`))
@@ -17,7 +19,7 @@ export async function render(url: string): Promise<{ html: string; head: string 
     <HelmetProvider context={helmet}>
       <QueryClientProvider client={new QueryClient()}>
         <TooltipProvider>
-          <StaticRouterProvider router={router} context={context} />
+          <StaticRouterProvider router={router} context={context} hydrate={false} />
         </TooltipProvider>
       </QueryClientProvider>
     </HelmetProvider>,

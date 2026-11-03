@@ -291,3 +291,64 @@ func containsAny(lines []string, subs ...string) bool {
 	}
 	return false
 }
+
+// A finding names everyone who can reach it. A document from when it named
+// one actor reads as a list of one; the list is kept least privileged
+// first, each actor once; none stands alone; an unknown actor is refused.
+func TestExploitableByList(t *testing.T) {
+	var f Finding
+	if err := json.Unmarshal([]byte(`{"exploitable_by":"any_user"}`), &f); err != nil || len(f.ExploitableBy) != 1 || f.ExploitableBy[0] != ExploitableAnyUser {
+		t.Fatalf("a single string: %v %v", f.ExploitableBy, err)
+	}
+	f = Finding{}
+	if err := json.Unmarshal([]byte(`{"exploitable_by":null}`), &f); err != nil || f.ExploitableBy != nil {
+		t.Fatalf("null: %v %v", f.ExploitableBy, err)
+	}
+	if err := json.Unmarshal([]byte(`{"exploitable_by":""}`), &f); err != nil || f.ExploitableBy != nil {
+		t.Fatalf("empty string: %v %v", f.ExploitableBy, err)
+	}
+	if err := json.Unmarshal([]byte(`{"exploitable_by":["admin","anyone"]}`), &f); err != nil || len(f.ExploitableBy) != 2 {
+		t.Fatalf("a list: %v %v", f.ExploitableBy, err)
+	}
+	if err := json.Unmarshal([]byte(`{"exploitable_by":7}`), &f); err == nil {
+		t.Fatal("a number read as actors")
+	}
+
+	d := sample()
+	d.Findings[0].ExploitableBy = Exploiters{ExploitableAdmin, ExploitableAPIKey, ExploitableAnyUser, ExploitableAPIKey}
+	if err := d.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	if got := d.Findings[0].ExploitableBy; len(got) != 3 || got[0] != ExploitableAnyUser || got[1] != ExploitableAPIKey || got[2] != ExploitableAdmin || got.Least() != ExploitableAnyUser {
+		t.Fatalf("normalised: %v", got)
+	}
+	b, _ := json.Marshal(d.Findings[0])
+	if !strings.Contains(string(b), `"exploitable_by":["any_user","api_key","admin"]`) {
+		t.Fatalf("written as a list: %s", b)
+	}
+
+	d = sample()
+	d.Findings[0].ExploitableBy = Exploiters{ExploitableNone, ExploitableAdmin}
+	if err := d.Validate(); err == nil || !strings.Contains(err.Error(), "none stands alone") {
+		t.Fatalf("none beside an actor: %v", err)
+	}
+	d = sample()
+	d.Findings[0].ExploitableBy = Exploiters{ExploitableNone}
+	if err := d.Validate(); err != nil {
+		t.Fatalf("none alone: %v", err)
+	}
+	// A repository's insiders are two actors, each its own tag.
+	d = sample()
+	d.Findings[0].ExploitableBy = Exploiters{ExploitableInternal, ExploitablePipeline, ExploitableContributor}
+	if err := d.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	if got := d.Findings[0].ExploitableBy; len(got) != 3 || got[0] != ExploitableContributor || got[1] != ExploitablePipeline || got[2] != ExploitableInternal {
+		t.Fatalf("insiders on the ladder: %v", got)
+	}
+	d = sample()
+	d.Findings[0].ExploitableBy = Exploiters{"anyone", "root"}
+	if err := d.Validate(); err == nil || !strings.Contains(err.Error(), `"root"`) {
+		t.Fatalf("an unknown actor: %v", err)
+	}
+}
